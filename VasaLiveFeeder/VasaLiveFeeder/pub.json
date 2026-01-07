@@ -1,0 +1,46 @@
+﻿[
+  {
+    "SQLServerDBConnectionString": "REDACTED",
+    "controlPanelLink": "https://portal.azure.com",
+    "databases": null,
+    "destinationAppUrl": "http://vasalivefeeder.azurewebsites.net",
+    "hostingProviderForumLink": "",
+    "msdeploySite": "VasaLiveFeeder",
+    "mySQLDBConnectionString": "",
+    "profileName": "VasaLiveFeeder - Web Deploy",
+    "publishMethod": "MSDeploy",
+    "publishUrl": "vasalivefeeder.scm.azurewebsites.net:443",
+    "userName": "REDACTED",
+    "userPWD": "REDACTED",
+    "webSystem": "WebSites"
+  },
+  {
+    "SQLServerDBConnectionString": "REDACTED",
+    "controlPanelLink": "https://portal.azure.com",
+    "databases": null,
+    "destinationAppUrl": "http://vasalivefeeder.azurewebsites.net",
+    "ftpPassiveMode": "True",
+    "hostingProviderForumLink": "",
+    "mySQLDBConnectionString": "",
+    "profileName": "VasaLiveFeeder - FTP",
+    "publishMethod": "FTP",
+    "publishUrl": "ftps://waws-prod-sec-007.ftp.azurewebsites.windows.net/site/wwwroot",
+    "userName": "REDACTED",
+    "userPWD": "REDACTED",
+    "webSystem": "WebSites"
+  },
+  {
+    "SQLServerDBConnectionString": "REDACTED",
+    "controlPanelLink": "https://portal.azure.com",
+    "databases": null,
+    "destinationAppUrl": "http://vasalivefeeder.azurewebsites.net",
+    "hostingProviderForumLink": "",
+    "mySQLDBConnectionString": "",
+    "profileName": "VasaLiveFeeder - Zip Deploy",
+    "publishMethod": "ZipDeploy",
+    "publishUrl": "vasalivefeeder.scm.azurewebsites.net:443",
+    "userName": "REDACTED",
+    "userPWD": "REDACTED",
+    "webSystem": "WebSites"
+  }
+]

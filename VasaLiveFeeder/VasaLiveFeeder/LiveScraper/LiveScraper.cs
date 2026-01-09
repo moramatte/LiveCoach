@@ -1,30 +1,28 @@
 using Microsoft.Playwright;
-using System;
 using System.Diagnostics;
 using System.Globalization;
-using System.IO;
-using System.Net.Http;
 using System.Reflection;
 using System.Text;
+using System.Text.Json;
 using System.Text.RegularExpressions;
-using System.Threading.Tasks;
-using Infrastructure.Logger;
 
-namespace VasaLiveFeeder;
+namespace VasaLiveFeeder.LiveScraper;
 
 /// <summary>
 /// Fetches live race information and extracts how far the leader has come (in kilometers).
 /// </summary>
-public class LiveScraper
+public class LiveScraper : ILiveScraper
 {
     private readonly HttpClient _httpClient;
+    private readonly string? _groqApiKey;
 
     /// <summary>
     /// Create a new scraper using the provided <see cref="HttpClient"/>.
     /// </summary>
-    public LiveScraper(HttpClient httpClient)
+    public LiveScraper(HttpClient httpClient, string? groqApiKey = null)
     {
         _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
+        _groqApiKey = groqApiKey ?? Environment.GetEnvironmentVariable("GROQ_API_KEY");
     }
 
     /// <summary>
@@ -70,7 +68,10 @@ public class LiveScraper
         var page = await browser.NewPageAsync();
         await page.GotoAsync(url, new PageGotoOptions { WaitUntil = WaitUntilState.NetworkIdle, Timeout = timeoutMs });
         var content = await page.ContentAsync();
-        return ParseContent(content);
+        
+        // Try AI analysis first, then fall back to regex
+        var aiResult = await AnalyzeWithAgentAsync(content).ConfigureAwait(false);
+        return aiResult ?? ParseContent(content);
     }
 
     private static double? ParseContent(string content)
@@ -116,55 +117,100 @@ public class LiveScraper
         return best;
     }
 
-    //private void AnalyzeWithML(string context)
-    //{
-    //    var logText = string.Empty;
-    //    Log.Info(GetType(), $"Initiating ML analysis: context: {context}. {Environment.NewLine}logText length: {logText.Length}");
+    /// <summary>
+    /// Uses an AI reasoning model (Groq) to analyze race content and extract leader distance in kilometers.
+    /// Falls back to regex parsing if API is unavailable or parsing fails.
+    /// </summary>
+    /// <param name="content">Raw HTML or text content from a race results page</param>
+    /// <returns>Leader distance in km, or null if extraction fails</returns>
+    public async Task<double?> AnalyzeWithAgentAsync(string content)
+    {
+        if (string.IsNullOrWhiteSpace(content))
+        {
+            return null;
+        }
 
-    //    var tokenLimit = 2000;
-    //    var tokens = Infrastructure.Utilities.TokenEvaluator.Evaluate(logText);
-    //    if (tokens > tokenLimit)
-    //    {
-    //        logText = Infrastructure.Utilities.TokenEvaluator.Reduce(logText, tokenLimit);
-    //    }
+        // First try fast regex-based parsing
+        var regexResult = ParseContent(content);
+        if (regexResult.HasValue)
+        {
+            return regexResult;
+        }
 
-    //    var requestBody = new
-    //    {
-    //        model = Config.ModelName,
-    //        messages = new[]
-    //        {
-    //            new { role = "system", content = context },
-    //            new { role = "user", content = logText }
-    //        },
-    //        max_tokens = 256
-    //    };
+        // Fall back to AI reasoning if API key is available
+        if (string.IsNullOrWhiteSpace(_groqApiKey))
+        {
+            return null;
+        }
 
-    //    try
-    //    {
-    //        var payload = requestBody.ToJson();
+        try
+        {
+            // Truncate content if too large (Groq context limit ~8k tokens, ~32k chars safely)
+            var truncated = content.Length > 30000 ? content.Substring(0, 30000) : content;
 
-    //        using var request = new HttpRequestMessage(HttpMethod.Post, foundryLocalEndpoint)
-    //        {
-    //            Content = new StringContent(payload, Encoding.UTF8, "application/json")
-    //        };
-    //        using var response = await httpClient.SendAsync(request);
-    //        if (!response.IsSuccessStatusCode)
-    //            return $"[Phi model error: {response.StatusCode} - {response.ReasonPhrase}]";
-    //        var responseString = await response.Content.ReadAsStringAsync();
-    //        using var doc = System.Text.Json.JsonDocument.Parse(responseString);
-    //        var content = doc.RootElement
-    //            .GetProperty("choices")[0]
-    //            .GetProperty("message")
-    //            .GetProperty("content").GetString();
-    //        return content ?? "[No response from model]";
-    //    }
-    //    catch (Exception ex)
-    //    {
-    //        Log.Error(GetType(), $"Error calling model {Config.ModelName}", ex);
-    //        return $"[Exception: {ex.Message}]";
-    //    }
-    
-    //}
+            var requestBody = new
+            {
+                model = "llama-3.3-70b-versatile",
+                messages = new[]
+                {
+                    new
+                    {
+                        role = "system",
+                        content = "You are a race data analyst. Extract the leader's distance in kilometers from race results. Return ONLY a number (e.g., '42.5' or '13.2'). If you cannot find the leader distance, return 'null'."
+                    },
+                    new
+                    {
+                        role = "user",
+                        content = $"Analyze this race page content and extract how far the race leader has progressed in kilometers:\n\n{truncated}"
+                    }
+                },
+                temperature = 0.1,
+                max_tokens = 50
+            };
+
+            var json = JsonSerializer.Serialize(requestBody);
+            using var request = new HttpRequestMessage(HttpMethod.Post, "https://api.groq.com/openai/v1/chat/completions")
+            {
+                Content = new StringContent(json, Encoding.UTF8, "application/json")
+            };
+            request.Headers.Add("Authorization", $"Bearer {_groqApiKey}");
+
+            using var response = await _httpClient.SendAsync(request).ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode)
+            {
+                var error = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+                Console.WriteLine($"[Groq API error {response.StatusCode}]: {error}");
+                return null;
+            }
+
+            var responseString = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+            using var doc = JsonDocument.Parse(responseString);
+            var aiResult = doc.RootElement
+                .GetProperty("choices")[0]
+                .GetProperty("message")
+                .GetProperty("content")
+                .GetString();
+
+            if (string.IsNullOrWhiteSpace(aiResult) || aiResult.Contains("null", StringComparison.OrdinalIgnoreCase))
+            {
+                return null;
+            }
+
+            // Extract number from response (handle "42.5 km" or just "42.5")
+            var numberMatch = Regex.Match(aiResult, @"(\d+(?:[.,]\d+)?)");
+            if (numberMatch.Success && TryParseNumber(numberMatch.Groups[1].Value, out var km))
+            {
+                return km;
+            }
+
+            return null;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[AnalyzeWithAgent error]: {ex.Message}");
+            return null;
+        }
+    }
 
     private static bool TryParseNumber(string raw, out double value)
     {

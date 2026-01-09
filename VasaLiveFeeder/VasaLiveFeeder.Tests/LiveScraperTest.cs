@@ -13,10 +13,26 @@ namespace VasaLiveFeeder.Tests
         [TestMethod]
         public async Task LiveDataCanBeScraped()
         {
-            var scraper = new LiveScraper();
+            var scraper = new LiveScraper.LiveScraper();
             var data = await scraper.GetLeaderDistanceWithPlaywrightAsync("https://live.eqtiming.com/73152#result:297321-0-1308925-1-1-");
 
             Assert.IsTrue(data > 0);
+        }
+
+        [TestMethod]
+        public async Task LiveDataIsScraped()
+        {
+            var scraper = new LiveScraper.LiveScraper();
+            var data = await scraper.GetLeaderDistanceWithPlaywrightAsync("https://live.fis-ski.com/cc-3632/results-pda.htm");
+
+            Assert.IsTrue(data > 0);
+        }
+
+
+        [TestMethod]
+        public async Task GroqCanAnalyzeLeaderDistance()
+        {
+
         }
     }
 }

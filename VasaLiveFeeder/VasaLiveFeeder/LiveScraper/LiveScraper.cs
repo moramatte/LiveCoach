@@ -37,19 +37,22 @@ public class LiveScraper : ILiveScraper
     public async Task<double?> GetLeaderDistanceKmAsync(string url)
     {
         if (string.IsNullOrWhiteSpace(url)) throw new ArgumentException("url is required", nameof(url));
-
-        string content;
-        try
+        
+        // Check for Browserless token first (handles JavaScript)
+        var browserlessToken = Environment.GetEnvironmentVariable("BROWSERLESS_TOKEN");
+        if (!string.IsNullOrEmpty(browserlessToken))
         {
-            content = await _httpClient.GetStringAsync(url).ConfigureAwait(false);
-        }
-        catch (Exception e)
-        {
-            Console.WriteLine(e);
-            throw;
+            var content = await GetRenderedHtmlViaBrowserlessAsync(url, browserlessToken, 30000);
+            var aiResult = await AnalyzeWithAgentAsync(content).ConfigureAwait(false);
+            return aiResult ?? ParseContent(content);
         }
 
-        return ParseContent(content);
+        // Fall back to basic HTTP (won't work for JS-rendered sites)
+        var html = await _httpClient.GetStringAsync(url).ConfigureAwait(false);
+        
+        // Try AI analysis first, then fall back to regex
+        var aiAnalysis = await AnalyzeWithAgentAsync(html).ConfigureAwait(false);
+        return aiAnalysis ?? ParseContent(html);
     }
 
     /// <summary>
@@ -59,8 +62,31 @@ public class LiveScraper : ILiveScraper
     public async Task<double?> GetLeaderDistanceWithPlaywrightAsync(string url, int timeoutMs = 30000)
     {
         if (string.IsNullOrWhiteSpace(url)) throw new ArgumentException("url is required", nameof(url));
-        // Ensure Playwright browser binaries are installed. Prefer API call when available,
-        // otherwise fall back to running the generated installer script (playwright.ps1).
+        
+        // Try Browserless first if API token is configured
+        var browserlessToken = Environment.GetEnvironmentVariable("BROWSERLESS_TOKEN");
+        Console.WriteLine($"[GetLeaderDistanceWithPlaywrightAsync] BROWSERLESS_TOKEN: {(string.IsNullOrEmpty(browserlessToken) ? "NOT SET" : "SET (" + browserlessToken.Substring(0, Math.Min(10, browserlessToken.Length)) + "...)")}");
+        
+        if (!string.IsNullOrEmpty(browserlessToken))
+        {
+            try
+            {
+                Console.WriteLine("[GetLeaderDistanceWithPlaywrightAsync] Using Browserless...");
+                var htmlContent = await GetRenderedHtmlViaBrowserlessAsync(url, browserlessToken, timeoutMs);
+                Console.WriteLine($"[GetLeaderDistanceWithPlaywrightAsync] Browserless returned {htmlContent?.Length ?? 0} characters");
+                var browserlessAiResult = await AnalyzeWithAgentAsync(htmlContent).ConfigureAwait(false);
+                var result = browserlessAiResult ?? ParseContent(htmlContent);
+                Console.WriteLine($"[GetLeaderDistanceWithPlaywrightAsync] Result: {result}");
+                return result;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Browserless failed, falling back to Playwright: {ex.Message}");
+            }
+        }
+
+        // Fall back to Playwright (requires browser installation)
+        Console.WriteLine("[GetLeaderDistanceWithPlaywrightAsync] Falling back to Playwright...");
         await EnsurePlaywrightBrowsersInstalledAsync().ConfigureAwait(false);
 
         using var playwright = await Playwright.CreateAsync().ConfigureAwait(false);
@@ -72,6 +98,30 @@ public class LiveScraper : ILiveScraper
         // Try AI analysis first, then fall back to regex
         var aiResult = await AnalyzeWithAgentAsync(content).ConfigureAwait(false);
         return aiResult ?? ParseContent(content);
+    }
+
+    private async Task<string> GetRenderedHtmlViaBrowserlessAsync(string url, string apiToken, int timeoutMs)
+    {
+        var requestBody = new
+        {
+            url = url,
+            waitForTimeout = Math.Min(timeoutMs, 30000), // Max 30s
+            gotoOptions = new { waitUntil = "networkidle0" }
+        };
+
+        var content = new StringContent(
+            JsonSerializer.Serialize(requestBody),
+            Encoding.UTF8,
+            "application/json"
+        );
+
+        var response = await _httpClient.PostAsync(
+            $"https://chrome.browserless.io/content?token={apiToken}",
+            content
+        );
+
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadAsStringAsync();
     }
 
     private static double? ParseContent(string content)
@@ -228,78 +278,42 @@ public class LiveScraper : ILiveScraper
 
     private static async Task EnsurePlaywrightBrowsersInstalledAsync()
     {
+        // Avoid repeating installation attempts in the same process
+        lock (s_playwrightInstallLock)
+        {
+            if (s_playwrightInstallChecked) return;
+        }
+
         try
         {
-            // Avoid repeating installation attempts in the same process
-            lock (s_playwrightInstallLock)
-            {
-                if (s_playwrightInstallChecked) return;
-            }
-
+            // On Linux (Azure Functions), use the Playwright CLI installer directly
             var playwrightType = Type.GetType("Microsoft.Playwright.Playwright, Microsoft.Playwright");
-            var installMethod = playwrightType?.GetMethod("InstallAsync", BindingFlags.Public | BindingFlags.Static);
-            if (installMethod != null)
+            if (playwrightType == null)
             {
-                var installTask = (Task)installMethod.Invoke(null, null)!;
-                await installTask.ConfigureAwait(false);
                 lock (s_playwrightInstallLock) { s_playwrightInstallChecked = true; }
                 return;
             }
 
-            // Fallback: run the generated PowerShell installer script next to the executing assembly.
-            var baseDir = AppContext.BaseDirectory ?? Directory.GetCurrentDirectory();
-            var scriptPath = Path.Combine(baseDir, "playwright.ps1");
-            if (!File.Exists(scriptPath))
+            // Try to use Playwright's built-in installation method
+            var programType = Type.GetType("Microsoft.Playwright.Program, Microsoft.Playwright");
+            if (programType != null)
             {
-                // No script and no API installer available; nothing we can do here.
-                lock (s_playwrightInstallLock) { s_playwrightInstallChecked = true; }
-                return;
-            }
-
-            // Try common PowerShell executables. pwsh (PowerShell Core) is preferred, fall back to Windows PowerShell.
-            var candidates = new[] { "pwsh", "powershell.exe" };
-            Exception? lastEx = null;
-            foreach (var cmd in candidates)
-            {
-                try
+                var mainMethod = programType.GetMethod("Main", BindingFlags.Public | BindingFlags.Static);
+                if (mainMethod != null)
                 {
-                    var args = cmd.Equals("powershell.exe", StringComparison.OrdinalIgnoreCase)
-                        ? $"-NoProfile -ExecutionPolicy Bypass -File \"{scriptPath}\" install"
-                        : $"-ExecutionPolicy Bypass -File \"{scriptPath}\" install";
-
-                    var psi = new ProcessStartInfo(cmd, args)
-                    {
-                        RedirectStandardOutput = true,
-                        RedirectStandardError = true,
-                        UseShellExecute = false,
-                        CreateNoWindow = true
-                    };
-
-                    using var p = Process.Start(psi);
-                    if (p == null) continue;
-                    await p.WaitForExitAsync().ConfigureAwait(false);
-                    if (p.ExitCode != 0)
-                    {
-                        var err = await p.StandardError.ReadToEndAsync().ConfigureAwait(false);
-                        throw new InvalidOperationException($"Playwright install script failed ({cmd}): {err}");
-                    }
-
+                    // Run: playwright install chromium --with-deps
+                    mainMethod.Invoke(null, new object[] { new[] { "install", "chromium", "--with-deps" } });
                     lock (s_playwrightInstallLock) { s_playwrightInstallChecked = true; }
                     return;
                 }
-                catch (Exception ex)
-                {
-                    lastEx = ex;
-                    // try next candidate
-                }
             }
 
-            throw new InvalidOperationException($"Could not run the Playwright installer script (playwright.ps1). Tried executables: {string.Join(", ", candidates)}. Ensure PowerShell is installed and on PATH.", lastEx);
+            lock (s_playwrightInstallLock) { s_playwrightInstallChecked = true; }
         }
         catch (Exception ex)
         {
-            // Bubble up so caller sees the real installation problem instead of a later file-not-found.
-            throw new InvalidOperationException("Failed to ensure Playwright browser binaries are installed.", ex);
+            Console.WriteLine($"[Playwright install warning]: {ex.Message}");
+            lock (s_playwrightInstallLock) { s_playwrightInstallChecked = true; }
         }
     }
 }

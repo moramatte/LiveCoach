@@ -153,11 +153,16 @@ public class Function1
         var scraper = ServiceLocator.Resolve<ILiveScraper>();
         var leaderDistance = await scraper.GetLeaderDistanceWithPlaywrightAsync("https://live.eqtiming.com/73152#result:297321-0-1308925-1-1-");
         
+        if (!leaderDistance.HasValue)
+        {
+            throw new InvalidOperationException("Could not extract leader distance from race page.");
+        }
+        
         var leaderKm = leaderDistance.Value;
         var ourPlus50Percent = myProgress * 1.5;
         var delta = leaderKm - ourPlus50Percent;
 
-        return  delta;
+        return delta;
     }
 
     public async Task<double> DeriveTempoDelta(string raceName, string myProgressStr, string meanSpeedStr)
@@ -191,7 +196,7 @@ public class Function1
         var tsToGo = TimeSpan.FromSeconds(timeToGoSeconds);
         
         var myTime = $"{tsToGo:hh\\:mm\\:ss}";
-        
+
         _logger.LogInformation($"Old speed: {meanSpeed}. New speed: {requiredSpeed}. Estimated total time: {myTime}");
 
         return double.Round(requiredSpeed.KilometersPerHour, 2);

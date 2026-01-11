@@ -8,214 +8,186 @@ using System.Text.RegularExpressions;
 
 namespace VasaLiveFeeder.LiveScraper;
 
-/// <summary>
-/// Fetches live race information and extracts how far the leader has come (in kilometers).
-/// </summary>
 public class LiveScraper : ILiveScraper
 {
     private readonly HttpClient _httpClient;
     private readonly string? _groqApiKey;
+    
+    private static readonly Dictionary<string, (LeaderData? Data, DateTime Timestamp)> _cache = new();
+    private static readonly object _cacheLock = new object();
+    private static readonly TimeSpan _cacheTTL = TimeSpan.FromSeconds(30);
 
-    /// <summary>
-    /// Create a new scraper using the provided <see cref="HttpClient"/>.
-    /// </summary>
     public LiveScraper(HttpClient httpClient, string? groqApiKey = null)
     {
         _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
         _groqApiKey = groqApiKey ?? Environment.GetEnvironmentVariable("GROQ_API_KEY");
     }
 
-    /// <summary>
-    /// Convenience constructor that creates a new HttpClient instance.
-    /// </summary>
     public LiveScraper() : this(new HttpClient()) { }
 
-    /// <summary>
-    /// Fetches the content at <paramref name="url"/> and attempts to extract the leader distance in kilometers.
-    /// Returns null if no sensible value could be extracted.
-    /// </summary>
-    public async Task<double?> GetLeaderDistanceKmAsync(string url)
+    public async Task<LeaderData?> GetLeaderDataAsync(string url)
     {
-        if (string.IsNullOrWhiteSpace(url)) throw new ArgumentException("url is required", nameof(url));
-        
-        // Check for Browserless token first (handles JavaScript)
-        var browserlessToken = Environment.GetEnvironmentVariable("BROWSERLESS_TOKEN");
-        if (!string.IsNullOrEmpty(browserlessToken))
+        if (TryGetFromCache(url, out var cachedData))
         {
-            var content = await GetRenderedHtmlViaBrowserlessAsync(url, browserlessToken, 30000);
-            var aiResult = await AnalyzeWithAgentAsync(content).ConfigureAwait(false);
-            return aiResult ?? ParseContent(content);
+            Console.WriteLine($"[Cache HIT] Returning cached data for {url}");
+            return cachedData;
         }
-
-        // Fall back to basic HTTP (won't work for JS-rendered sites)
-        var html = await _httpClient.GetStringAsync(url).ConfigureAwait(false);
         
-        // Try AI analysis first, then fall back to regex
-        var aiAnalysis = await AnalyzeWithAgentAsync(html).ConfigureAwait(false);
-        return aiAnalysis ?? ParseContent(html);
-    }
-
-    /// <summary>
-    /// Renders the page with Playwright (executes JavaScript) and runs the same parsing logic
-    /// against the rendered HTML. This requires Playwright browser binaries to be installed on the machine.
-    /// </summary>
-    public async Task<double?> GetLeaderDistanceWithPlaywrightAsync(string url, int timeoutMs = 30000)
-    {
-        if (string.IsNullOrWhiteSpace(url)) throw new ArgumentException("url is required", nameof(url));
-        
-        // Try Browserless first if API token is configured
-        var browserlessToken = Environment.GetEnvironmentVariable("BROWSERLESS_TOKEN");
-        Console.WriteLine($"[GetLeaderDistanceWithPlaywrightAsync] BROWSERLESS_TOKEN: {(string.IsNullOrEmpty(browserlessToken) ? "NOT SET" : "SET (" + browserlessToken.Substring(0, Math.Min(10, browserlessToken.Length)) + "...)")}");
-        
-        if (!string.IsNullOrEmpty(browserlessToken))
+        try
         {
-            try
+            // For SkiClassics and EQTiming, we need JavaScript rendering
+            // Try Browserless first (if available), then fall back to Playwright
+            var browserlessToken = Environment.GetEnvironmentVariable("BROWSERLESS_TOKEN");
+            if (!string.IsNullOrWhiteSpace(browserlessToken))
             {
-                Console.WriteLine("[GetLeaderDistanceWithPlaywrightAsync] Using Browserless...");
-                var htmlContent = await GetRenderedHtmlViaBrowserlessAsync(url, browserlessToken, timeoutMs);
-                Console.WriteLine($"[GetLeaderDistanceWithPlaywrightAsync] Browserless returned {htmlContent?.Length ?? 0} characters");
-                var browserlessAiResult = await AnalyzeWithAgentAsync(htmlContent).ConfigureAwait(false);
-                var result = browserlessAiResult ?? ParseContent(htmlContent);
-                Console.WriteLine($"[GetLeaderDistanceWithPlaywrightAsync] Result: {result}");
-                return result;
+                try
+                {
+                    Console.WriteLine($"[GetLeaderDataAsync] Trying Browserless for {url}");
+                    var result = await GetLeaderDataWithBrowserlessOrPlaywrightAsync(url, browserlessToken, 30000).ConfigureAwait(false);
+                    if (result != null)
+                    {
+                        AddToCache(url, result);
+                        return result;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[Browserless error]: {ex.Message}. Falling back to Playwright...");
+                }
             }
-            catch (Exception ex)
+
+            // Fall back to Playwright for JavaScript rendering
+            Console.WriteLine($"[GetLeaderDataAsync] Using Playwright for {url}");
+            var playwrightResult = await GetLeaderDataWithScraperAsync(url, 30000).ConfigureAwait(false);
+            if (playwrightResult != null)
             {
-                Console.WriteLine($"Browserless failed, falling back to Playwright: {ex.Message}");
+                AddToCache(url, playwrightResult);
             }
+            return playwrightResult;
         }
-
-        // Fall back to Playwright (requires browser installation)
-        Console.WriteLine("[GetLeaderDistanceWithPlaywrightAsync] Falling back to Playwright...");
-        await EnsurePlaywrightBrowsersInstalledAsync().ConfigureAwait(false);
-
-        using var playwright = await Playwright.CreateAsync().ConfigureAwait(false);
-        await using var browser = await playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions { Headless = true }).ConfigureAwait(false);
-        var page = await browser.NewPageAsync();
-        await page.GotoAsync(url, new PageGotoOptions { WaitUntil = WaitUntilState.NetworkIdle, Timeout = timeoutMs });
-        var content = await page.ContentAsync();
-        
-        // Try AI analysis first, then fall back to regex
-        var aiResult = await AnalyzeWithAgentAsync(content).ConfigureAwait(false);
-        return aiResult ?? ParseContent(content);
-    }
-
-    private async Task<string> GetRenderedHtmlViaBrowserlessAsync(string url, string apiToken, int timeoutMs)
-    {
-        var requestBody = new
+        catch (Exception ex)
         {
-            url = url,
-            waitForTimeout = Math.Min(timeoutMs, 30000), // Max 30s
-            gotoOptions = new { waitUntil = "networkidle0" }
-        };
-
-        var content = new StringContent(
-            JsonSerializer.Serialize(requestBody),
-            Encoding.UTF8,
-            "application/json"
-        );
-
-        var response = await _httpClient.PostAsync(
-            $"https://chrome.browserless.io/content?token={apiToken}",
-            content
-        );
-
-        response.EnsureSuccessStatusCode();
-        return await response.Content.ReadAsStringAsync();
-    }
-
-    private static double? ParseContent(string content)
-    {
-        if (string.IsNullOrWhiteSpace(content)) return null;
-
-        // 1) Look for values followed by "km" (e.g. "12.34 km" or "12,34 km")
-        var kmRegex = new Regex(@"(\d{1,3}(?:[.,]\d+)?)(?:\s?km)\b", RegexOptions.IgnoreCase);
-        var kmMatch = kmRegex.Match(content);
-        if (kmMatch.Success)
-        {
-            if (TryParseNumber(kmMatch.Groups[1].Value, out var km)) return km;
-        }
-
-        // 2) Look for meters followed by 'm' and convert to km (e.g. "12345 m")
-        var mRegex = new Regex(@"(\d{1,7})(?:\s?m)\b", RegexOptions.IgnoreCase);
-        var mMatch = mRegex.Match(content);
-        if (mMatch.Success && double.TryParse(mMatch.Groups[1].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var meters))
-        {
-            // sanity check: meters should be large enough to indicate leader progress (e.g. > 0)
-            if (meters >= 1)
-            {
-                return meters / 1000.0;
-            }
-        }
-
-        // 3) Try to find JSON-like fields: "distance": 12.34 or "leaderDistance":12.34
-        var jsonNumberRegex = new Regex("\\\"(?:distance|leaderDistance|leader_distance)\\\"\\s*[:=]\\s*(\\d+(?:[.,]\\d+)?)", RegexOptions.IgnoreCase);
-        var jsonMatch = jsonNumberRegex.Match(content);
-        if (jsonMatch.Success && TryParseNumber(jsonMatch.Groups[1].Value, out var jsonKm)) return jsonKm;
-
-        // 4) As a last resort, find the largest km-like number on the page (heuristic)
-        var allKm = kmRegex.Matches(content);
-        double? best = null;
-        foreach (Match m in allKm)
-        {
-            if (TryParseNumber(m.Groups[1].Value, out var val))
-            {
-                if (!best.HasValue || val > best.Value) best = val;
-            }
-        }
-
-        return best;
-    }
-
-    /// <summary>
-    /// Uses an AI reasoning model (Groq) to analyze race content and extract leader distance in kilometers.
-    /// Falls back to regex parsing if API is unavailable or parsing fails.
-    /// </summary>
-    /// <param name="content">Raw HTML or text content from a race results page</param>
-    /// <returns>Leader distance in km, or null if extraction fails</returns>
-    public async Task<double?> AnalyzeWithAgentAsync(string content)
-    {
-        if (string.IsNullOrWhiteSpace(content))
-        {
+            Console.WriteLine($"[GetLeaderDataAsync error]: {ex.Message}");
             return null;
         }
+    }
 
-        // First try fast regex-based parsing
-        var regexResult = ParseContent(content);
-        if (regexResult.HasValue)
+    private async Task<LeaderData?> GetLeaderDataWithBrowserlessOrPlaywrightAsync(string url, string browserlessToken, int timeoutMs)
+    {
+        try
         {
-            return regexResult;
+            var htmlContent = await GetRenderedHtmlViaBrowserlessAsync(url, browserlessToken, timeoutMs).ConfigureAwait(false);
+            if (!string.IsNullOrWhiteSpace(htmlContent))
+            {
+                Console.WriteLine($"[Browserless] Successfully rendered HTML for {url}");
+                var result = await AnalyzeWithAgentAsync(htmlContent).ConfigureAwait(false);
+                return result;
+            }
+            return null;
         }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[GetLeaderDataWithBrowserlessOrPlaywrightAsync error]: {ex.Message}");
+            throw;
+        }
+    }
 
-        // Fall back to AI reasoning if API key is available
+    public async Task<LeaderData?> GetLeaderDataWithScraperAsync(string url, int timeoutMs = 30000)
+    {
+        if (TryGetFromCache(url, out var cachedData))
+        {
+            Console.WriteLine($"[Cache HIT] Returning cached data for {url}");
+            return cachedData;
+        }
+        
+        try
+        {
+            var browserlessToken = Environment.GetEnvironmentVariable("BROWSERLESS_TOKEN");
+            if (!string.IsNullOrWhiteSpace(browserlessToken))
+            {
+                try
+                {
+                    var htmlContent = await GetRenderedHtmlViaBrowserlessAsync(url, browserlessToken, timeoutMs).ConfigureAwait(false);
+                    if (!string.IsNullOrWhiteSpace(htmlContent))
+                    {
+                        Console.WriteLine($"[Browserless] Successfully rendered HTML for {url}");
+                        var browserlessResult = await AnalyzeWithAgentAsync(htmlContent).ConfigureAwait(false);
+                        if (browserlessResult != null)
+                        {
+                            AddToCache(url, browserlessResult);
+                        }
+                        return browserlessResult;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[Browserless error]: {ex.Message}. Falling back to Playwright...");
+                }
+            }
+
+            await EnsurePlaywrightBrowsersInstalledAsync().ConfigureAwait(false);
+            using var playwright = await Playwright.CreateAsync().ConfigureAwait(false);
+            await using var browser = await playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions { Headless = true }).ConfigureAwait(false);
+            var page = await browser.NewPageAsync().ConfigureAwait(false);
+            page.SetDefaultTimeout(timeoutMs);
+
+            await page.GotoAsync(url, new PageGotoOptions { WaitUntil = WaitUntilState.NetworkIdle }).ConfigureAwait(false);
+            var pageContent = await page.ContentAsync().ConfigureAwait(false);
+
+            var playwrightResult = await AnalyzeWithAgentAsync(pageContent).ConfigureAwait(false);
+            if (playwrightResult != null)
+            {
+                AddToCache(url, playwrightResult);
+            }
+            return playwrightResult;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[GetLeaderDataWithScraperAsync error]: {ex.Message}");
+            return null;
+        }
+    }
+
+    public async Task<LeaderData?> AnalyzeWithAgentAsync(string content)
+    {
         if (string.IsNullOrWhiteSpace(_groqApiKey))
         {
+            Console.WriteLine("[AnalyzeWithAgent]: No GROQ_API_KEY found");
             return null;
         }
 
         try
         {
-            // Truncate content if too large (Groq context limit ~8k tokens, ~32k chars safely)
-            var truncated = content.Length > 30000 ? content.Substring(0, 30000) : content;
-
+            var extractedData = ExtractRaceData(content);
+            Console.WriteLine($"[Groq] Processing {extractedData.Length} chars");
+            
             var requestBody = new
             {
                 model = "llama-3.3-70b-versatile",
-                messages = new[]
+                messages = new object[]
                 {
                     new
                     {
                         role = "system",
-                        content = "You are a race data analyst. Extract the leader's distance in kilometers from race results. Return ONLY a number (e.g., '42.5' or '13.2'). If you cannot find the leader distance, return 'null'."
+                        content = "Extract distance (km) and leader's time from race timing data.\n\n" +
+                                   "PROVIDERS:\n" +
+                                   "- SkiClassics: Distance in h3/h4 headings or 'Active Checkpoint'\n" +
+                                   "- EQTiming: Distance in 'Point' column or race title. 'Mål' = Finish\n\n" +
+                                   "RULES:\n" +
+                                   "- Distance: Current checkpoint where leader is tracked\n" +
+                                   "- Time: From first data row (leader), format H:MM:SS or HH:MM:SS\n\n" +
+                                   "OUTPUT FORMAT (no explanation):\n" +
+                                   "distance: [number], time: [H:MM:SS]\n" +
+                                   "If data unclear: distance: null, time: null"
                     },
                     new
                     {
                         role = "user",
-                        content = $"Analyze this race page content and extract how far the race leader has progressed in kilometers:\n\n{truncated}"
+                        content = $"Extract:\n\n{extractedData}"
                     }
                 },
-                temperature = 0.1,
-                max_tokens = 50
+                temperature = 0.0, // Use 0 for deterministic output
+                max_tokens = 50 // Concise output only
             };
 
             var json = JsonSerializer.Serialize(requestBody);
@@ -226,34 +198,19 @@ public class LiveScraper : ILiveScraper
             request.Headers.Add("Authorization", $"Bearer {_groqApiKey}");
 
             using var response = await _httpClient.SendAsync(request).ConfigureAwait(false);
+            var responseBody = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+
             if (!response.IsSuccessStatusCode)
             {
-                var error = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                Console.WriteLine($"[Groq API error {response.StatusCode}]: {error}");
+                Console.WriteLine($"[Groq API error {response.StatusCode}]: {responseBody}");
                 return null;
             }
 
-            var responseString = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-            using var doc = JsonDocument.Parse(responseString);
-            var aiResult = doc.RootElement
-                .GetProperty("choices")[0]
-                .GetProperty("message")
-                .GetProperty("content")
-                .GetString();
+            var jsonResponse = JsonSerializer.Deserialize<JsonElement>(responseBody);
+            var aiResult = jsonResponse.GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString();
+            Console.WriteLine($"[AI Response]: {aiResult}");
 
-            if (string.IsNullOrWhiteSpace(aiResult) || aiResult.Contains("null", StringComparison.OrdinalIgnoreCase))
-            {
-                return null;
-            }
-
-            // Extract number from response (handle "42.5 km" or just "42.5")
-            var numberMatch = Regex.Match(aiResult, @"(\d+(?:[.,]\d+)?)");
-            if (numberMatch.Success && TryParseNumber(numberMatch.Groups[1].Value, out var km))
-            {
-                return km;
-            }
-
-            return null;
+            return ParseAIResponse(aiResult);
         }
         catch (Exception ex)
         {
@@ -262,58 +219,311 @@ public class LiveScraper : ILiveScraper
         }
     }
 
-    private static bool TryParseNumber(string raw, out double value)
+    private static string ExtractRaceData(string html)
     {
-        value = 0;
-        if (string.IsNullOrWhiteSpace(raw)) return false;
-        raw = raw.Trim();
-        // normalize comma decimal separators to dot for invariant parsing
-        if (raw.Contains(",") && !raw.Contains(".")) raw = raw.Replace(',', '.');
-        return double.TryParse(raw, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out value);
-    }
+        if (string.IsNullOrWhiteSpace(html))
+            return string.Empty;
 
-    // Cache to avoid running installation multiple times in the same process
-    private static readonly object s_playwrightInstallLock = new object();
-    private static bool s_playwrightInstallChecked;
+        var sections = new List<string>();
+        
+        // Provider detection
+        string provider = html.Contains("live.skiklasserna.se") || html.Contains("skiclassics") ? "SkiClassics"
+                        : html.Contains("live.eqtiming.com") || html.Contains("eqtiming") ? "EQTiming"
+                        : "Unknown";
+        
+        Console.WriteLine($"[Provider] Detected: {provider}");
+        sections.Add($"PROVIDER: {provider}");
 
-    private static async Task EnsurePlaywrightBrowsersInstalledAsync()
-    {
-        // Avoid repeating installation attempts in the same process
-        lock (s_playwrightInstallLock)
+        // Extract page title for event context
+        var titleMatch = Regex.Match(html, @"<title>([^<]+)</title>", RegexOptions.IgnoreCase);
+        if (titleMatch.Success)
         {
-            if (s_playwrightInstallChecked) return;
+            sections.Add($"Page Title: {titleMatch.Groups[1].Value.Trim()}");
+            Console.WriteLine($"[Title] {titleMatch.Groups[1].Value.Trim()}");
         }
 
-        try
+        // Provider-specific extraction
+        if (provider == "SkiClassics")
         {
-            // On Linux (Azure Functions), use the Playwright CLI installer directly
-            var playwrightType = Type.GetType("Microsoft.Playwright.Playwright, Microsoft.Playwright");
-            if (playwrightType == null)
+            // Extract ALL checkpoints from checkpoint list (gives race context and total distance)
+            var checkpointMatches = Regex.Matches(html, @"<h[34][^>]*>\s*([\d.,]+)\s*km\s*\|\s*([^<]+)</h[34]>", RegexOptions.IgnoreCase);
+            if (checkpointMatches.Count > 0)
             {
-                lock (s_playwrightInstallLock) { s_playwrightInstallChecked = true; }
-                return;
-            }
-
-            // Try to use Playwright's built-in installation method
-            var programType = Type.GetType("Microsoft.Playwright.Program, Microsoft.Playwright");
-            if (programType != null)
-            {
-                var mainMethod = programType.GetMethod("Main", BindingFlags.Public | BindingFlags.Static);
-                if (mainMethod != null)
+                sections.Add($"\nCheckpoints ({checkpointMatches.Count} found):");
+                foreach (Match match in checkpointMatches)
                 {
-                    // Run: playwright install chromium --with-deps
-                    mainMethod.Invoke(null, new object[] { new[] { "install", "chromium", "--with-deps" } });
-                    lock (s_playwrightInstallLock) { s_playwrightInstallChecked = true; }
-                    return;
+                    sections.Add($"  {match.Groups[1].Value} km | {match.Groups[2].Value.Trim()}");
+                }
+                Console.WriteLine($"[SkiClassics] Found {checkpointMatches.Count} checkpoints");
+            }
+            else
+            {
+                Console.WriteLine($"[SkiClassics] WARNING: No checkpoints found in h3/h4 headings");
+            }
+            
+            // Also look for active checkpoint marker
+            var activeMatch = Regex.Match(html, @"data-checkpoint-active=""true""[^>]*>.*?<h[34][^>]*>\s*([\d.,]+)\s*km", 
+                                         RegexOptions.IgnoreCase | RegexOptions.Singleline);
+            if (activeMatch.Success)
+            {
+                sections.Add($"\nActive Checkpoint: {activeMatch.Groups[1].Value} km");
+                Console.WriteLine($"[SkiClassics] Active checkpoint: {activeMatch.Groups[1].Value} km");
+            }
+        }
+        else if (provider == "EQTiming")
+        {
+            // Extract race distance from table content (e.g., "45 km Motion", "45 km Tävling")
+            var raceDistanceMatches = Regex.Matches(html, @">([\d.,]+)\s*km\s+(?:Motion|Tävling|Elite|Race)<", RegexOptions.IgnoreCase);
+            if (raceDistanceMatches.Count > 0)
+            {
+                sections.Add($"\nRace distances found:");
+                var distances = new HashSet<string>();
+                foreach (Match match in raceDistanceMatches.Cast<Match>().Take(10))
+                {
+                    distances.Add($"{match.Groups[1].Value} km");
+                }
+                foreach (var dist in distances)
+                {
+                    sections.Add($"  {dist}");
+                }
+                Console.WriteLine($"[EQTiming] Found {distances.Count} unique race distances");
+            }
+            
+            // Extract Point column values (current checkpoint positions, including "Mål")
+            var pointMatches = Regex.Matches(html, @"<td[^>]*class=""[^""]*col-point-scroll[^""]*""[^>]*>([^<]+)</td>", RegexOptions.IgnoreCase);
+            if (pointMatches.Count > 0)
+            {
+                sections.Add($"\nPoint column (first 10 entries):");
+                var pointValues = new List<string>();
+                for (int i = 0; i < Math.Min(10, pointMatches.Count); i++)
+                {
+                    var value = pointMatches[i].Groups[1].Value.Trim();
+                    pointValues.Add(value);
+                    sections.Add($"  {i + 1}. {value}");
+                }
+                Console.WriteLine($"[EQTiming] Found {pointMatches.Count} Point column values, showing first 10");
+                
+                // If we see "Mål" (Finish), note it
+                if (pointValues.Any(v => v.Contains("Mål") || v.Contains("mal")))
+                {
+                    sections.Add($"\n[Note: 'Mål' (Finish) detected - leader has finished race]");
+                    Console.WriteLine($"[EQTiming] Detected 'Mål' (Finish) in Point column");
                 }
             }
+            else
+            {
+                Console.WriteLine($"[EQTiming] WARNING: No Point column values found");
+            }
+        }
 
-            lock (s_playwrightInstallLock) { s_playwrightInstallChecked = true; }
+        // Extract results table with better context preservation
+        // Try multiple patterns to find the results table
+        Match tableMatch = null;
+        
+        // Pattern 1: Look for table with common timing headers
+        tableMatch = Regex.Match(html, @"<table[^>]*>.*?(?:Position|Pos|Rank|Bib|Athlete|Point|Time).*?</table>", 
+                                RegexOptions.IgnoreCase | RegexOptions.Singleline);
+        
+        // Pattern 2: If no match, look for any table with "live-center-table" or similar class
+        if (!tableMatch.Success)
+        {
+            tableMatch = Regex.Match(html, @"<table[^>]*(?:class=""[^""]*(?:live|result|timing)[^""]*"")[^>]*>.*?</table>", 
+                                    RegexOptions.IgnoreCase | RegexOptions.Singleline);
+            Console.WriteLine($"[Table] Trying class-based pattern");
+        }
+        
+        // Pattern 3: If still no match, look for any table with tbody
+        if (!tableMatch.Success)
+        {
+            tableMatch = Regex.Match(html, @"<table[^>]*>.*?<tbody>.*?</tbody>.*?</table>", 
+                                    RegexOptions.IgnoreCase | RegexOptions.Singleline);
+            Console.WriteLine($"[Table] Trying tbody pattern");
+        }
+        
+        if (tableMatch.Success)
+        {
+            var tableHtml = tableMatch.Value;
+            Console.WriteLine($"[Table] Found table with {tableHtml.Length} chars");
+            
+            // Keep some HTML structure to help AI understand table layout
+            // Extract table headers
+            var headerMatch = Regex.Match(tableHtml, @"<thead>.*?</thead>", RegexOptions.IgnoreCase | RegexOptions.Singleline);
+            if (headerMatch.Success)
+            {
+                var headerText = StripHtmlTags(headerMatch.Value);
+                sections.Add($"\nTABLE HEADERS:\n{headerText}");
+            }
+            
+            // Extract first 20 rows (leader + context)
+            var rowMatches = Regex.Matches(tableHtml, @"<tr[^>]*>.*?</tr>", RegexOptions.IgnoreCase | RegexOptions.Singleline);
+            if (rowMatches.Count > 0)
+            {
+                sections.Add($"\nTABLE ROWS (first 20 of {rowMatches.Count}):");
+                for (int i = 0; i < Math.Min(20, rowMatches.Count); i++)
+                {
+                    var rowText = StripHtmlTags(rowMatches[i].Value);
+                    // Clean up extra whitespace
+                    rowText = Regex.Replace(rowText, @"\s+", " ").Trim();
+                    if (!string.IsNullOrWhiteSpace(rowText) && rowText.Length > 5)
+                    {
+                        sections.Add($"  Row {i + 1}: {rowText}");
+                    }
+                }
+                Console.WriteLine($"[Table] Extracted {Math.Min(20, rowMatches.Count)} rows from {rowMatches.Count} total");
+            }
+        }
+        else
+        {
+            Console.WriteLine($"[Table] WARNING: No results table found with any pattern");
+        }
+
+        var result = string.Join("\n", sections);
+        
+        // Truncate if still too large (stay under 20K for AI token limits)
+        if (result.Length > 20000)
+        {
+            result = result.Substring(0, 20000) + "\n... [truncated]";
+            Console.WriteLine($"[ExtractRaceData] Truncated output to 20K chars");
+        }
+        else
+        {
+            Console.WriteLine($"[ExtractRaceData] Output size: {result.Length} chars");
+        }
+        
+        return result;
+    }
+
+    private static LeaderData? ParseAIResponse(string? aiResult)
+    {
+        if (string.IsNullOrWhiteSpace(aiResult) || aiResult.Contains("null"))
+            return null;
+
+        var distanceMatch = Regex.Match(aiResult, @"distance:\s*([\d.]+)", RegexOptions.IgnoreCase);
+        var timeMatch = Regex.Match(aiResult, @"time:\s*(\d+:\d+:\d+)", RegexOptions.IgnoreCase);
+
+        if (!distanceMatch.Success)
+            return null;
+
+        var distance = double.Parse(distanceMatch.Groups[1].Value, CultureInfo.InvariantCulture);
+        TimeSpan? time = null;
+
+        if (timeMatch.Success && TimeSpan.TryParse(timeMatch.Groups[1].Value, out var parsedTime))
+            time = parsedTime;
+
+        return new LeaderData(distance, time);
+    }
+
+    private async Task<string> GetRenderedHtmlViaBrowserlessAsync(string url, string apiToken, int timeoutMs)
+    {
+        try
+        {
+            // Use /content endpoint with gotoOptions.waitUntil to ensure JavaScript executes
+            var requestBody = new
+            {
+                url,
+                gotoOptions = new
+                {
+                    waitUntil = "networkidle2" // Wait for network to be idle (max 2 connections)
+                }
+            };
+
+            var json = JsonSerializer.Serialize(requestBody);
+            Console.WriteLine($"[Browserless] Calling /content API for {url} with networkidle2 wait");
+            
+            // Token goes in URL query parameter
+            using var request = new HttpRequestMessage(HttpMethod.Post, $"https://chrome.browserless.io/content?token={apiToken}")
+            {
+                Content = new StringContent(json, Encoding.UTF8, "application/json")
+            };
+
+            using var response = await _httpClient.SendAsync(request).ConfigureAwait(false);
+            var responseBody = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+            
+            Console.WriteLine($"[Browserless] Response status: {response.StatusCode}");
+            
+            if (!response.IsSuccessStatusCode)
+            {
+                var errorPreview = responseBody.Length > 200 ? responseBody.Substring(0, 200) + "..." : responseBody;
+                Console.WriteLine($"[Browserless] Error response: {errorPreview}");
+                
+                // Check for common issues
+                if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+                {
+                    throw new Exception($"Browserless authentication failed - check BROWSERLESS_TOKEN");
+                }
+                else if (response.StatusCode == System.Net.HttpStatusCode.TooManyRequests || 
+                         responseBody.Contains("rate limit") || responseBody.Contains("quota"))
+                {
+                    throw new Exception($"Browserless rate limit exceeded - consider upgrading plan or try later");
+                }
+                else if ((int)response.StatusCode >= 500)
+                {
+                    throw new Exception($"Browserless service error (likely temporary outage) - status {response.StatusCode}");
+                }
+                
+                throw new Exception($"Browserless API failed with status {response.StatusCode}: {errorPreview}");
+            }
+            
+            Console.WriteLine($"[Browserless] Success - received {responseBody.Length} chars");
+            
+            // Debug: Check if table exists
+            var tablePos = responseBody.IndexOf("<table", StringComparison.OrdinalIgnoreCase);
+            if (tablePos > 0)
+            {
+                Console.WriteLine($"[Browserless] ? Table found at position {tablePos}");
+            }
+            else
+            {
+                Console.WriteLine($"[Browserless] ? No <table> tag found - JavaScript may not have executed");
+            }
+            
+            return responseBody;
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[Playwright install warning]: {ex.Message}");
-            lock (s_playwrightInstallLock) { s_playwrightInstallChecked = true; }
+            Console.WriteLine($"[Browserless] Exception: {ex.Message}");
+            throw;
+        }
+    }
+
+    private static async Task EnsurePlaywrightBrowsersInstalledAsync()
+    {
+        // Skip Playwright installation check - assume browsers are installed or handle errors at runtime
+        await Task.CompletedTask;
+    }
+
+    private static string StripHtmlTags(string html)
+    {
+        return Regex.Replace(html, @"<[^>]+>", " ")
+            .Replace("&nbsp;", " ")
+            .Replace("&amp;", "&")
+            .Replace("&lt;", "<")
+            .Replace("&gt;", ">");
+    }
+
+    private static bool TryGetFromCache(string url, out LeaderData? data)
+    {
+        lock (_cacheLock)
+        {
+            if (_cache.TryGetValue(url, out var cached) && DateTime.UtcNow - cached.Timestamp < _cacheTTL)
+            {
+                data = cached.Data;
+                return true;
+            }
+            _cache.Remove(url);
+        }
+        data = null;
+        return false;
+    }
+
+    private static void AddToCache(string url, LeaderData? data)
+    {
+        lock (_cacheLock)
+        {
+            _cache[url] = (data, DateTime.UtcNow);
+            var expired = _cache.Where(kvp => DateTime.UtcNow - kvp.Value.Timestamp >= _cacheTTL)
+                                 .Select(kvp => kvp.Key).ToList();
+            expired.ForEach(k => _cache.Remove(k));
         }
     }
 }

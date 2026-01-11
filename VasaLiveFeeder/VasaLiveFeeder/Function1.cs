@@ -151,14 +151,14 @@ public class Function1
     public async Task<double> DeriveDistanceDelta(string raceName, double myProgress)
     {
         var scraper = ServiceLocator.Resolve<ILiveScraper>();
-        var leaderDistance = await scraper.GetLeaderDistanceWithPlaywrightAsync("https://live.eqtiming.com/73152#result:297321-0-1308925-1-1-");
+        var leaderData = await scraper.GetLeaderDataWithScraperAsync("https://live.eqtiming.com/73152#result:297321-0-1308925-1-1-");
         
-        if (!leaderDistance.HasValue)
+        if (leaderData == null)
         {
             throw new InvalidOperationException("Could not extract leader distance from race page.");
         }
         
-        var leaderKm = leaderDistance.Value;
+        var leaderKm = leaderData.DistanceKm;
         var ourPlus50Percent = myProgress * 1.5;
         var delta = leaderKm - ourPlus50Percent;
 

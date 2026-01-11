@@ -1,4 +1,5 @@
-﻿using System.Threading.Tasks;
+﻿using System;
+using System.Threading.Tasks;
 using VasaLiveFeeder.LiveScraper;
 
 namespace VasaLiveFeeder.Tests
@@ -6,20 +7,21 @@ namespace VasaLiveFeeder.Tests
     internal class TestableLiveScraper : ILiveScraper
     {
         public static double ReturnValue { get; set; }
+        public static TimeSpan? ReturnTime { get; set; }
         
-        public async Task<double?> GetLeaderDistanceKmAsync(string url)
+        public async Task<LeaderData?> GetLeaderDataAsync(string url)
         {
-            return ReturnValue;
+            return new LeaderData(ReturnValue, ReturnTime);
         }
         
-        public async Task<double?> GetLeaderDistanceWithPlaywrightAsync(string url, int timeoutMs = 30000)
+        public async Task<LeaderData?> GetLeaderDataWithScraperAsync(string url, int timeoutMs = 30000)
         {
-            return ReturnValue;
+            return new LeaderData(ReturnValue, ReturnTime);
         }
         
-        public async Task<double?> AnalyzeWithAgentAsync(string content)
+        public async Task<LeaderData?> AnalyzeWithAgentAsync(string content)
         {
-            return ReturnValue;
+            return new LeaderData(ReturnValue, ReturnTime);
         }
     }
 }

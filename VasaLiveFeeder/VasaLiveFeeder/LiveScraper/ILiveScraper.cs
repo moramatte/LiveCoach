@@ -11,21 +11,21 @@
 public interface ILiveScraper
 {
     /// <summary>
-    /// Gets leader distance using basic HTTP or Browserless if configured.
+    /// Gets leader data (distance and time) using basic HTTP or Browserless if configured.
     /// Tries AI analysis, falls back to regex parsing.
     /// </summary>
-    Task<double?> GetLeaderDistanceKmAsync(string url);
+    Task<LeaderData?> GetLeaderDataAsync(string url);
     
     /// <summary>
-    /// Gets leader distance using Playwright (requires local browser installation).
-    /// Falls back to Browserless if BROWSERLESS_TOKEN is set.
+    /// Gets leader data (distance and time) using the scraper (Browserless or Playwright fallback).
+    /// Tries Browserless first if BROWSERLESS_TOKEN is set, falls back to Playwright if needed.
     /// Tries AI analysis, falls back to regex parsing.
     /// </summary>
-    Task<double?> GetLeaderDistanceWithPlaywrightAsync(string url, int timeoutMs = 30000);
+    Task<LeaderData?> GetLeaderDataWithScraperAsync(string url, int timeoutMs = 30000);
     
     /// <summary>
-    /// Uses AI (Groq) to analyze HTML content and extract leader distance.
+    /// Uses AI (Groq) to analyze HTML content and extract leader data.
     /// Requires GROQ_API_KEY environment variable.
     /// </summary>
-    Task<double?> AnalyzeWithAgentAsync(string htmlContent);
+    Task<LeaderData?> AnalyzeWithAgentAsync(string htmlContent);
 }

@@ -16,4 +16,8 @@
   <ItemGroup>
     <ProjectReference Include="..\VasaLiveFeeder\VasaLiveFeeder.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <None Include="LiveDataSamples\**\*" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>

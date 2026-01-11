@@ -1,0 +1,828 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=12.0, minimum-scale=.25, user-scalable=yes">
+    <meta name="google-site-verification" content="Bb0jp_Mlse8Dqj9JWfyeNVEGtVXfOrUq9yqD4taMOuw">
+    <meta name="description" content="Timekeeping, results, livetracking and more for hundreds of racing events in the nordic countries.">
+    <meta name="author" content="eqtiming">
+    <meta name="google" value="notranslate">
+    <link rel="icon" href="./favicon.ico">
+
+
+
+    <title>Craft Ski Marathon 2025</title>
+
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://live.eqtiming.com/73152">
+    <meta property="og:title" content="Craft Ski Marathon 2025 - 1/12/2025">
+    <meta property="og:description" content="Find all the latest results for Craft Ski Marathon 2025 right here.">
+    <meta property="og:image" content="//live.eqtiming.com/Content/gfx/media/eqtiming.meta.logo.png">
+
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image">
+    <meta property="twitter:url" content="https://live.eqtiming.com/73152">
+    <meta property="twitter:title" content="Craft Ski Marathon 2025 - 1/12/2025">
+    <meta property="twitter:description" content="Find all the latest results for Craft Ski Marathon 2025 right here.">
+    <meta property="twitter:image" content="//live.eqtiming.com/Content/gfx/media/eqtiming.meta.logo.png">
+
+
+
+
+    <link href="/Content/stylesheet/css?v=8dO1mhM7gZXP3SsT8rhvb4xgePZ5u3eshUYMKsLIodY1" rel="stylesheet">
+
+    <link href="/Content/stylesheet/sass?v=qCbn54jXLEQMdtwusep_L5yX7rN7ENC1J1dVTuNTa7c1" rel="stylesheet">
+
+
+    <link rel="stylesheet" href="/theme/event/49936/layout.css?v=20260110194815">
+    <link rel="stylesheet" href="/theme/event/73152/override.css?v=20260110194815">
+    <style>
+        #ChipSeachLogo {
+            display: none;
+        }
+    </style>
+
+    <script src="https://connect.facebook.net/en_US/sdk.js?hash=21317e9b03e083605cc7ca24df241c9c" async="" crossorigin="anonymous"></script>
+    <script type="text/javascript" async="" defer="" src="//stats.eqtiming.com/tracker"></script>
+    <script id="facebook-jssdk" src="//connect.facebook.net/en_US/sdk.js"></script>
+    <script id="twitter-wjs" src="https://platform.twitter.com/widgets.js"></script>
+    <script type="text/javascript" src="https://www.google.com/jsapi"></script>
+    <script type="text/javascript" src="//maps.googleapis.com/maps/api/js?v=3.56&amp;sensor=false&amp;key=AIzaSyDy8Dipdf5YmRUFgN_FIDwIPI_M-nyAUeI"></script>
+    <script type="text/javascript" src="/Content/beta/MarkerWithLabel.js"></script>
+    <script type="text/javascript" src="/Content/beta/markerclusterer.js"></script>
+
+    <script language="javascript">var hash = document.location.hash;
+        // Check if it matches regex .*series:(\d+).*
+        let seriesId = null;
+        if (hash.match(/.*series:(\d+).*/)) {
+            seriesId = parseInt(hash.match(/.*series:(\d+).*/)[1]);
+        }
+
+        var EQ = {
+            eventId: 73152,
+            version: "2025.11.12.1300",
+            urlParameters: {},
+            theme: {
+                path: "/theme/event/73152",
+                pages: null,
+                pagesHtml: null,
+                background: "/theme/grenmaster/1/eqmebackground.jpeg?v=20191021114411",
+                pictogram: null
+            },
+			isDebug: false,
+			isCached: false,
+        	host: "live-prodREZ6ZU",
+			user: null,
+			noTwitter: false,
+			noFaceBook: false,
+			noStatistics: false,
+            noCookieWarning: false,
+            seriesId: seriesId,
+
+        };
+
+		if (EQ.isCached) {
+			console.log("Using cached data.");
+        }
+
+        try {
+
+            var _urlParameters = (document.location.search || "").replace("?", "");
+            if (_urlParameters != "") {
+                var _parameters = _urlParameters.split("&");
+                for (var K in _parameters) {
+                    var propvalues = _parameters[K].split("=");
+
+                    if (propvalues.length > 0)
+                        window.EQ.urlParameters[propvalues[0]] = propvalues[1] || true;
+                }
+            }
+        } catch (e) {
+            console.error(e);
+		}
+
+
+		// Temp check for hksapp. Disable tracking stuff
+		if (window.EQ.urlParameters.hasOwnProperty('hksapp')) {
+			window.EQ.noTwitter = true;
+			window.EQ.noFaceBook = true;
+			window.EQ.noStatistics = true;
+			window.EQ.noCookieWarning = true;
+		}
+
+        var app_path = {
+            "content": "/content",
+            "locales": "/content",
+            "theme": "",
+            "html": "/content/html",
+            "hubs": ["livehub.eqtiming.com"],
+            "hubtransport": "webSockets",
+            "development": false
+            };
+
+
+
+
+        var theme = document.location.search.match(/theme=([a-zA-Z0-9]+)/);
+
+        // Always add eqme theme for app
+        if ((document.cookie !== null && document.cookie.indexOf("EQappId") >= 0) || document.location.search.indexOf("eqmeappid") >= 0) {
+            theme = ["eqme", "eqme"];
+        }
+
+        paceOptions = {
+            ajax: {
+                ignoreURLs: ["files.php", "piwik.php", "signalr"]
+            }
+        }
+
+
+        if ((theme || []).length > 0) {
+            document.write('<link rel="stylesheet" href="' + app_path.theme + '/theme/custom/' + theme[1] + '/layout.css?v=' + new Date().valueOf() + '">');
+        }</script>
+
+
+
+
+
+    <style></style>
+    <style type="text/css" data-fbcssmodules="css:fb.css.base css:fb.css.dialog css:fb.css.iframewidget">
+        .fb_hidden {
+            position: absolute;
+            top: -10000px;
+            z-index: 10001
+        }
+
+        .fb_reposition {
+            overflow: hidden;
+            position: relative
+        }
+
+        .fb_invisible {
+            display: none
+        }
+
+        .fb_reset {
+            background: none;
+            border: 0px;
+            border-spacing: 0;
+            color: #000;
+            cursor: auto;
+            direction: ltr;
+            font-family: lucida grande,tahoma,verdana,arial,sans-serif;
+            font-size: 11px;
+            font-style: normal;
+            font-variant: normal;
+            font-weight: 400;
+            letter-spacing: normal;
+            line-height: 1;
+            margin: 0;
+            overflow: visible;
+            padding: 0;
+            text-align: left;
+            text-decoration: none;
+            text-indent: 0;
+            text-shadow: none;
+            text-transform: none;
+            visibility: visible;
+            white-space: normal;
+            word-spacing: normal
+        }
+
+            .fb_reset > div {
+                overflow: hidden
+            }
+
+        @keyframes fb_transform {
+            0% {
+                opacity: 0;
+                transform: scale(.95)
+            }
+
+            to {
+                opacity: 1;
+                transform: scale(1)
+            }
+        }
+
+        .fb_animate {
+            animation: fb_transform .3s forwards
+        }
+
+        .fb_hidden {
+            position: absolute;
+            top: -10000px;
+            z-index: 10001
+        }
+
+        .fb_reposition {
+            overflow: hidden;
+            position: relative
+        }
+
+        .fb_invisible {
+            display: none
+        }
+
+        .fb_reset {
+            background: none;
+            border: 0px;
+            border-spacing: 0;
+            color: #000;
+            cursor: auto;
+            direction: ltr;
+            font-family: lucida grande,tahoma,verdana,arial,sans-serif;
+            font-size: 11px;
+            font-style: normal;
+            font-variant: normal;
+            font-weight: 400;
+            letter-spacing: normal;
+            line-height: 1;
+            margin: 0;
+            overflow: visible;
+            padding: 0;
+            text-align: left;
+            text-decoration: none;
+            text-indent: 0;
+            text-shadow: none;
+            text-transform: none;
+            visibility: visible;
+            white-space: normal;
+            word-spacing: normal
+        }
+
+            .fb_reset > div {
+                overflow: hidden
+            }
+
+        @keyframes fb_transform {
+            0% {
+                opacity: 0;
+                transform: scale(.95)
+            }
+
+            to {
+                opacity: 1;
+                transform: scale(1)
+            }
+        }
+
+        .fb_animate {
+            animation: fb_transform .3s forwards
+        }
+
+        .fb_dialog {
+            background: #525252b3;
+            position: absolute;
+            top: -10000px;
+            z-index: 10001
+        }
+
+        .fb_dialog_advanced {
+            border-radius: 8px;
+            padding: 10px
+        }
+
+        .fb_dialog_content {
+            background: #fff;
+            color: #373737
+        }
+
+        .fb_dialog_close_icon {
+            background: url(https://connect.facebook.net/rsrc.php/v4/yq/r/IE9JII6Z1Ys.png) no-repeat scroll 0 0 transparent;
+            cursor: pointer;
+            display: block;
+            height: 15px;
+            position: absolute;
+            right: 18px;
+            top: 17px;
+            width: 15px
+        }
+
+        .fb_dialog_mobile .fb_dialog_close_icon {
+            left: 5px;
+            right: auto;
+            top: 5px
+        }
+
+        .fb_dialog_padding {
+            background-color: transparent;
+            position: absolute;
+            width: 1px;
+            z-index: -1
+        }
+
+        .fb_dialog_close_icon:hover {
+            background: url(https://connect.facebook.net/rsrc.php/v4/yq/r/IE9JII6Z1Ys.png) no-repeat scroll 0 -15px transparent
+        }
+
+        .fb_dialog_close_icon:active {
+            background: url(https://connect.facebook.net/rsrc.php/v4/yq/r/IE9JII6Z1Ys.png) no-repeat scroll 0 -30px transparent
+        }
+
+        .fb_dialog_iframe {
+            line-height: 0
+        }
+
+        .fb_dialog_content .dialog_title {
+            background: #6d84b4;
+            border: 1px solid #365899;
+            color: #fff;
+            font-size: 14px;
+            font-weight: 700;
+            margin: 0
+        }
+
+            .fb_dialog_content .dialog_title > span {
+                background: url(https://connect.facebook.net/rsrc.php/v4/yd/r/Cou7n-nqK52.gif) no-repeat 5px 50%;
+                float: left;
+                padding: 5px 0 7px 26px
+            }
+
+        body.fb_hidden {
+            height: 100%;
+            left: 0;
+            margin: 0;
+            overflow: visible;
+            position: absolute;
+            top: -10000px;
+            transform: none;
+            width: 100%
+        }
+
+        .fb_dialog.fb_dialog_mobile.loading {
+            background: url(https://connect.facebook.net/rsrc.php/v4/ya/r/3rhSv5V8j3o.gif) #fff no-repeat 50% 50%;
+            min-height: 100%;
+            min-width: 100%;
+            overflow: hidden;
+            position: absolute;
+            top: 0;
+            z-index: 10001
+        }
+
+            .fb_dialog.fb_dialog_mobile.loading.centered {
+                background: none;
+                height: auto;
+                min-height: initial;
+                min-width: initial;
+                width: auto
+            }
+
+                .fb_dialog.fb_dialog_mobile.loading.centered #fb_dialog_loader_spinner {
+                    width: 100%
+                }
+
+                .fb_dialog.fb_dialog_mobile.loading.centered .fb_dialog_content {
+                    background: none
+                }
+
+        .loading.centered #fb_dialog_loader_close {
+            clear: both;
+            color: #fff;
+            display: block;
+            font-size: 18px;
+            padding-top: 20px
+        }
+
+        #fb-root #fb_dialog_ipad_overlay {
+            background: #0006;
+            inset: 0;
+            min-height: 100%;
+            position: absolute;
+            width: 100%;
+            z-index: 10000
+        }
+
+            #fb-root #fb_dialog_ipad_overlay.hidden {
+                display: none
+            }
+
+        .fb_dialog.fb_dialog_mobile.loading iframe {
+            visibility: hidden
+        }
+
+        .fb_dialog_mobile .fb_dialog_iframe {
+            position: sticky;
+            top: 0
+        }
+
+        .fb_dialog_content .dialog_header {
+            background: linear-gradient(from(#738aba),to(#2c4987));
+            border-bottom: 1px solid;
+            border-color: #043b87;
+            box-shadow: #fff 0 1px 1px -1px inset;
+            color: #fff;
+            font: 700 14px Helvetica,sans-serif;
+            text-overflow: ellipsis;
+            text-shadow: rgba(0,30,84,.296875) 0px -1px 0px;
+            vertical-align: middle;
+            white-space: nowrap
+        }
+
+            .fb_dialog_content .dialog_header table {
+                height: 43px;
+                width: 100%
+            }
+
+            .fb_dialog_content .dialog_header td.header_left {
+                font-size: 12px;
+                padding-left: 5px;
+                vertical-align: middle;
+                width: 60px
+            }
+
+            .fb_dialog_content .dialog_header td.header_right {
+                font-size: 12px;
+                padding-right: 5px;
+                vertical-align: middle;
+                width: 60px
+            }
+
+        .fb_dialog_content .touchable_button {
+            background: linear-gradient(from(#4267B2),to(#2a4887));
+            background-clip: padding-box;
+            border: 1px solid #29487d;
+            border-radius: 3px;
+            display: inline-block;
+            line-height: 18px;
+            margin-top: 3px;
+            max-width: 85px;
+            padding: 4px 12px;
+            position: relative
+        }
+
+        .fb_dialog_content .dialog_header .touchable_button input {
+            background: none;
+            border: none;
+            color: #fff;
+            font: 700 12px Helvetica,sans-serif;
+            margin: 2px -12px;
+            padding: 2px 6px 3px;
+            text-shadow: rgba(0,30,84,.296875) 0px -1px 0px
+        }
+
+        .fb_dialog_content .dialog_header .header_center {
+            color: #fff;
+            font-size: 16px;
+            font-weight: 700;
+            line-height: 18px;
+            text-align: center;
+            vertical-align: middle
+        }
+
+        .fb_dialog_content .dialog_content {
+            background: url(https://connect.facebook.net/rsrc.php/v4/y9/r/jKEcVPZFk-2.gif) no-repeat 50% 50%;
+            border: 1px solid #4A4A4A;
+            border-bottom: 0;
+            border-top: 0;
+            height: 150px
+        }
+
+        .fb_dialog_content .dialog_footer {
+            background: #f5f6f7;
+            border: 1px solid #4A4A4A;
+            border-top-color: #ccc;
+            height: 40px
+        }
+
+        #fb_dialog_loader_close {
+            float: left
+        }
+
+        .fb_dialog.fb_dialog_mobile .fb_dialog_close_icon {
+            visibility: hidden
+        }
+
+        #fb_dialog_loader_spinner {
+            animation: rotateSpinner 1.2s linear infinite;
+            background-color: transparent;
+            background-image: url(https://connect.facebook.net/rsrc.php/v4/yD/r/t-wz8gw1xG1.png);
+            background-position: 50% 50%;
+            background-repeat: no-repeat;
+            height: 24px;
+            width: 24px
+        }
+
+        @keyframes rotateSpinner {
+            0% {
+                transform: rotate(0)
+            }
+
+            to {
+                transform: rotate(360deg)
+            }
+        }
+
+        .fb_iframe_widget {
+            display: inline-block;
+            position: relative
+        }
+
+            .fb_iframe_widget span {
+                display: inline-block;
+                position: relative;
+                text-align: justify
+            }
+
+            .fb_iframe_widget iframe {
+                position: absolute
+            }
+
+        .fb_iframe_widget_fluid_desktop, .fb_iframe_widget_fluid_desktop span, .fb_iframe_widget_fluid_desktop iframe {
+            max-width: 100%
+        }
+
+            .fb_iframe_widget_fluid_desktop iframe {
+                min-width: 220px;
+                position: relative
+            }
+
+        .fb_iframe_widget_lift {
+            z-index: 1
+        }
+
+        .fb_iframe_widget_fluid {
+            display: inline
+        }
+
+            .fb_iframe_widget_fluid span {
+                width: 100%
+            }
+    </style>
+    <script type="text/javascript" charset="UTF-8" src="https://maps.googleapis.com/maps-api-v3/api/js/63/9d/common.js"></script>
+    <script type="text/javascript" charset="UTF-8" src="https://maps.googleapis.com/maps-api-v3/api/js/63/9d/util.js"></script>
+</head>
+
+<body fullscreen="" class="selectors-dropdown hide-rally  hide-self-timing eventDone show-panelresult show-group hide-coinfo display-tablet" data-sport="267" data-organization="371" data-page="Livescroll" data-viewport-width="800" data-viewport-height="600">
+    <div role="dialog" aria-live="polite" aria-label="cookieconsent" aria-describedby="cookieconsent:desc" class="cc-window cc-banner cc-type-info cc-theme-block cc-bottom cc-color-override-530831885 " style=""><!--googleoff: all--><span id="cookieconsent:desc" class="cc-message">This website uses cookies to ensure you get the best experience on our website. <a aria-label="learn more about cookies" role="button" tabindex="0" class="cc-link" href="https://www.cookielaw.org/the-cookie-law/" target="_blank">Learn more</a></span><div class="cc-compliance"><a aria-label="dismiss cookie message" role="button" tabindex="0" class="cc-btn cc-dismiss">Got it!</a></div><!--googleon: all--></div>
+    <div id="fb-root" class=" fb_reset"><div style="position: absolute; top: -10000px; width: 0px; height: 0px;"><div></div></div></div>
+
+    <div id="wrap">
+
+        <nav class="navbar navbar-default navbar-static-top">
+            <div class="container-fluid navbar-brand-header">
+                <div class="navbar-header">
+                    <button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-target="#navbar" aria-expanded="false" aria-controls="navbar">
+                        <div class="nav-icon">
+                            <span></span>
+                            <span></span>
+                            <span></span>
+                        </div>
+                    </button>
+                    <div class="navbar-brand-wrapper">
+                        <a class="navbar-brand" href="#">
+                            <h1>Craft Ski Marathon 2025</h1>
+                            <h2>01/12/2025</h2>
+                            <h3>Orsa Grönklitt</h3>
+                        </a>
+                    </div>
+                </div>
+                <div id="navbar" class="navbar-collapse collapse">
+                    <ul class="nav navbar-nav navbar-left">
+                        <li class="" data-headeelement="contestants">
+                            <a href="#contestants" data-url="contestants.html">
+                                <i class="fal fa-users"></i>
+                                <span data-i18n="header.contestants">Contestants</span>
+                            </a>
+                        </li>
+                        <li data-headeelement="hotlist">
+                            <a href="#hotlist" data-url="hotlist.html">
+                                <span class="label label-success hide"></span><i class="far fa-star" style="color: #F1A803"></i>
+                                <span data-i18n="header.hotlist">Hotlist</span>
+                            </a>
+                        </li>
+                        <li data-headeelement="result">
+                            <a href="#result" data-url="result.html">
+                                <i class="fal fa-trophy"></i>
+                                <span data-i18n="header.result">Result</span>
+                            </a>
+                        </li>
+                        <li data-headeelement="panelresult">
+                            <a href="#panelresult" data-url="panelresult.html">
+                                <i class="fal fal fa-table"></i>
+                                <span data-i18n="header.panelresult">Panels</span>
+                            </a>
+                        </li>
+                        <li data-headeelement="livescroll" class="active">
+                            <a href="#livescroll" data-url="livescroll.html">
+                                <i class="fal fa-tachometer"></i>
+                                <span data-i18n="header.livescroll">Live scroll</span>
+                            </a>
+                        </li>
+                        <li class="" data-headeelement="livetrack">
+                            <a href="#livetrack" data-url="livetrack.html">
+                                <i class="fal fa-map-marker" style="color: #FF7E73"></i>
+                                <span data-i18n="header.livetrack">Livetrack</span>
+                            </a>
+                        </li>
+                        <li class="hide" data-headeelement="liveshooting">
+                            <a href="#liveshooting" data-url="liveshooting.html">
+                                <i class="fal fa-crosshairs"></i>
+                                <span data-i18n="header.liveshooting">Liveshooting</span>
+                            </a>
+                        </li>
+                        <li class="hide" data-headeelement="cup">
+                            <a href="#cup" data-url="cup.html">
+                                <i class="fal fa-network-wired fa-rotate-90"></i>
+                                <span data-i18n="header.cup">Heat</span>
+                            </a>
+                        </li>
+                        <li class="hide" data-headeelement="series">
+                            <a href="#series" data-url="series.html">
+                                <i class="fal fa-sitemap"></i>
+                                <span data-i18n="header.series">Series</span>
+                            </a>
+                        </li>
+                        <li data-headeelement="rally">
+                            <a href="#rally" data-url="rally.html">
+                                <i class="fal fa-line-columns"></i>
+                                <span data-i18n="header.rally">Rally</span>
+                            </a>
+                        </li>
+                        <li data-headeelement="splitscreen">
+                            <a href="#splitscreen" data-url="splitscreen.html">
+                                <i class="fal fa-list-ul"></i>
+                                <span data-i18n="header.splitscreen">Splitscreen</span>
+                            </a>
+                        </li>
+                        <li class="show-always" data-headeelement="files">
+                            <a href="#files" data-url="files.html">
+                                <span class="label label-primary hide"></span><i class="fal fa-cloud-download"></i>
+                                <span data-i18n="header.downloads">Downloads</span>
+                            </a>
+                        </li>
+                    </ul>
+                    <ul class="nav navbar-nav navbar-right">
+                        <li class="dropdown">
+                            <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" aria-haspopup="true" aria-expanded="false"><span id="currentLanguage"><span class="flag-icon flag-icon-us"></span> <span>English</span></span> <span class="caret"></span></a>
+                            <ul class="dropdown-menu">
+                                <li class=""><a href="#" data-language="en"><span class="flag-icon flag-icon-us"></span> <span>English</span></a></li>
+                                <li><a href="#" data-language="nb-NO"><span class="flag-icon flag-icon-no"></span> <span>Norsk</span></a></li>
+                                <li><a href="#" data-language="sv"><span class="flag-icon flag-icon-se"></span> <span>Svenska</span></a></li>
+                                <li><a href="#" data-language="fi"><span class="flag-icon flag-icon-fi"></span> <span>Suomi</span></a></li>
+                                <li><a href="#" data-language="fr"><span class="flag-icon flag-icon-fr"></span> <span>Français</span></a></li>
+                                <li><a href="#" data-language="de"><span class="flag-icon flag-icon-de"></span> <span>Deutsch</span></a></li>
+                                <li><a href="#" data-language="ru"><span class="flag-icon flag-icon-ru"></span> <span>Россия</span></a></li>
+                                <li><a href="#" data-language="it"><span class="flag-icon flag-icon-it"></span> <span>Italiano</span></a></li>
+                                <li><a href="#" data-language="es"><span class="flag-icon flag-icon-es"></span> <span>Español</span></a></li>
+                                <li><a href="#" data-language="et"><span class="flag-icon flag-icon-ee"></span> <span>Eesti</span></a></li>
+                            </ul>
+                        </li>
+                        <li class="login noactive" data-element="LoginLink">
+
+
+                            <a href="#" class="noactive" data-type="Login" data-modal="true" data-action="Render">
+                                <i class="far fa-user"></i>
+                                <span data-i18n="account.login">Log in</span>
+                            </a>
+
+
+                        </li>
+                        <li class="dropdown hide" data-element="LoginProfile">
+                            <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" aria-haspopup="true" aria-expanded="false">
+                                <span>
+                                    <span data-element="ProfilePicture"></span>
+                                    <span data-element="ProfileName"></span>
+                                    <span class="caret"></span>
+                                </span>
+                            </a>
+                            <ul class="dropdown-menu">
+                                <li class="">
+                                    <a href="#" id="connectFacebook" data-facebook="connect"><i class="fab fa-facebook"></i> <span data-i18n="account.connectfacebook">Connect with Facebook</span></a>
+                                    <a href="#" id="diconnectFacebook" data-facebook="disconnect"><i class="fab fa-facebook"></i> <span data-i18n="account.disconnectfacebook">Disconnect from Facebook</span></a>
+                                </li>
+                                <li><a href="#" data-modal="false" data-type="logout"><i class="fa fa-sign-out"></i> <span data-i18n="account.logout">Log out</span></a></li>
+                            </ul>
+                        </li>
+                        <li><a href="#" id="setFullscreenMode"><i class="fa fa-arrows-alt"></i></a></li>
+                    </ul>
+                </div><!--/.nav-collapse -->
+            </div>
+            <div class="container-fluid navbar-event">
+                <span id="headerPart1">Craft Ski Marathon 2025</span>
+                <span id="headerPart2"></span>
+                <span id="headerPart3"></span>
+                <span id="headerPart4"></span>
+                <span id="headerRunningTime" class="serverrunningtime"></span>
+            </div>
+            <div id="messageBar"></div>
+        </nav>
+
+
+        <div class="container-fluid" id="pageContent">
+            <div class="container-fluid" id="PageID" data-id="livescroll">
+                <div class="col-filters">
+                    <div class="row">
+                        <div class="group-wrap">
+                            <div class="dropdown btn-group">
+                                <a href="#" class="btn btn-default" data-toggle="dropdown"><i class="fa fa-cog"></i> <span class="caret"></span></a>
+                                <ul class="dropdown-menu dropdown-checkbox-options" aria-labelledby="dLabel" id="livescrollOptions"><li><label for="liveoption-ranktotal"><div class="icheckbox_square-blue checked" style="position: relative;"><input type="checkbox" checked="checked" value="1" name="ranktotal" id="liveoption-ranktotal" style="position: absolute; opacity: 0;"><ins class="iCheck-helper" style="position: absolute; top: 0%; left: 0%; display: block; width: 100%; height: 100%; margin: 0px; padding: 0px; background: rgb(255, 255, 255); border: 0px; opacity: 0;"></ins></div> <span data-i18n="general.ranktotal">Rank total</span></label></li><li><label for="liveoption-rankgender"><div class="icheckbox_square-blue checked" style="position: relative;"><input type="checkbox" checked="checked" value="1" name="rankgender" id="liveoption-rankgender" style="position: absolute; opacity: 0;"><ins class="iCheck-helper" style="position: absolute; top: 0%; left: 0%; display: block; width: 100%; height: 100%; margin: 0px; padding: 0px; background: rgb(255, 255, 255); border: 0px; opacity: 0;"></ins></div> <span data-i18n="general.rankgender">Rank gender</span></label></li><li><label for="liveoption-rank"><div class="icheckbox_square-blue checked" style="position: relative;"><input type="checkbox" checked="checked" value="1" name="rank" id="liveoption-rank" style="position: absolute; opacity: 0;"><ins class="iCheck-helper" style="position: absolute; top: 0%; left: 0%; display: block; width: 100%; height: 100%; margin: 0px; padding: 0px; background: rgb(255, 255, 255); border: 0px; opacity: 0;"></ins></div> <span data-i18n="general.rank">Rank</span></label></li><li><label for="liveoption-bib"><div class="icheckbox_square-blue checked" style="position: relative;"><input type="checkbox" checked="checked" value="1" name="bib" id="liveoption-bib" style="position: absolute; opacity: 0;"><ins class="iCheck-helper" style="position: absolute; top: 0%; left: 0%; display: block; width: 100%; height: 100%; margin: 0px; padding: 0px; background: rgb(255, 255, 255); border: 0px; opacity: 0;"></ins></div> <span data-i18n="general.bib">Bib</span></label></li><li><label for="liveoption-name"><div class="icheckbox_square-blue checked" style="position: relative;"><input type="checkbox" checked="checked" value="1" name="name" id="liveoption-name" style="position: absolute; opacity: 0;"><ins class="iCheck-helper" style="position: absolute; top: 0%; left: 0%; display: block; width: 100%; height: 100%; margin: 0px; padding: 0px; background: rgb(255, 255, 255); border: 0px; opacity: 0;"></ins></div> <span data-i18n="table.name">Name</span></label></li><li><label for="liveoption-nation"><div class="icheckbox_square-blue checked" style="position: relative;"><input type="checkbox" checked="checked" value="1" name="nation" id="liveoption-nation" style="position: absolute; opacity: 0;"><ins class="iCheck-helper" style="position: absolute; top: 0%; left: 0%; display: block; width: 100%; height: 100%; margin: 0px; padding: 0px; background: rgb(255, 255, 255); border: 0px; opacity: 0;"></ins></div> <span data-i18n="table.nation">Nation</span></label></li><li><label for="liveoption-club"><div class="icheckbox_square-blue checked" style="position: relative;"><input type="checkbox" checked="checked" value="1" name="club" id="liveoption-club" style="position: absolute; opacity: 0;"><ins class="iCheck-helper" style="position: absolute; top: 0%; left: 0%; display: block; width: 100%; height: 100%; margin: 0px; padding: 0px; background: rgb(255, 255, 255); border: 0px; opacity: 0;"></ins></div> <span data-i18n="table.club">Club</span></label></li><li><label for="liveoption-class"><div class="icheckbox_square-blue checked" style="position: relative;"><input type="checkbox" checked="checked" value="1" name="class" id="liveoption-class" style="position: absolute; opacity: 0;"><ins class="iCheck-helper" style="position: absolute; top: 0%; left: 0%; display: block; width: 100%; height: 100%; margin: 0px; padding: 0px; background: rgb(255, 255, 255); border: 0px; opacity: 0;"></ins></div> <span data-i18n="table.classes">Class</span></label></li><li><label for="liveoption-race"><div class="icheckbox_square-blue" style="position: relative;"><input type="checkbox" value="1" name="race" id="liveoption-race" style="position: absolute; opacity: 0;"><ins class="iCheck-helper" style="position: absolute; top: 0%; left: 0%; display: block; width: 100%; height: 100%; margin: 0px; padding: 0px; background: rgb(255, 255, 255); border: 0px; opacity: 0;"></ins></div> <span data-i18n="table.race">Race</span></label></li><li><label for="liveoption-point"><div class="icheckbox_square-blue checked" style="position: relative;"><input type="checkbox" checked="checked" value="1" name="point" id="liveoption-point" style="position: absolute; opacity: 0;"><ins class="iCheck-helper" style="position: absolute; top: 0%; left: 0%; display: block; width: 100%; height: 100%; margin: 0px; padding: 0px; background: rgb(255, 255, 255); border: 0px; opacity: 0;"></ins></div> <span data-i18n="table.point">Point</span></label></li><li><label for="liveoption-lap"><div class="icheckbox_square-blue" style="position: relative;"><input type="checkbox" value="1" name="lap" id="liveoption-lap" style="position: absolute; opacity: 0;"><ins class="iCheck-helper" style="position: absolute; top: 0%; left: 0%; display: block; width: 100%; height: 100%; margin: 0px; padding: 0px; background: rgb(255, 255, 255); border: 0px; opacity: 0;"></ins></div> <span data-i18n="table.lap">Lap</span></label></li><li><label for="liveoption-timeofday"><div class="icheckbox_square-blue" style="position: relative;"><input type="checkbox" value="1" name="timeofday" id="liveoption-timeofday" style="position: absolute; opacity: 0;"><ins class="iCheck-helper" style="position: absolute; top: 0%; left: 0%; display: block; width: 100%; height: 100%; margin: 0px; padding: 0px; background: rgb(255, 255, 255); border: 0px; opacity: 0;"></ins></div> <span data-i18n="table.timeofday">Time of day</span></label></li><li><label for="liveoption-time"><div class="icheckbox_square-blue checked" style="position: relative;"><input type="checkbox" checked="checked" value="1" name="time" id="liveoption-time" style="position: absolute; opacity: 0;"><ins class="iCheck-helper" style="position: absolute; top: 0%; left: 0%; display: block; width: 100%; height: 100%; margin: 0px; padding: 0px; background: rgb(255, 255, 255); border: 0px; opacity: 0;"></ins></div> <span data-i18n="table.time">Time</span></label></li><li><label for="liveoption-difftime"><div class="icheckbox_square-blue checked" style="position: relative;"><input type="checkbox" checked="checked" value="1" name="difftime" id="liveoption-difftime" style="position: absolute; opacity: 0;"><ins class="iCheck-helper" style="position: absolute; top: 0%; left: 0%; display: block; width: 100%; height: 100%; margin: 0px; padding: 0px; background: rgb(255, 255, 255); border: 0px; opacity: 0;"></ins></div> <span data-i18n="table.difftime">Behind</span></label></li><li><label for="liveoption-additional"><div class="icheckbox_square-blue" style="position: relative;"><input type="checkbox" value="1" name="additional" id="liveoption-additional" style="position: absolute; opacity: 0;"><ins class="iCheck-helper" style="position: absolute; top: 0%; left: 0%; display: block; width: 100%; height: 100%; margin: 0px; padding: 0px; background: rgb(255, 255, 255); border: 0px; opacity: 0;"></ins></div> <span data-i18n="table.additional">Extra</span></label></li><li><label for="liveoption-splittime"><div class="icheckbox_square-blue" style="position: relative;"><input type="checkbox" value="1" name="splittime" id="liveoption-splittime" style="position: absolute; opacity: 0;"><ins class="iCheck-helper" style="position: absolute; top: 0%; left: 0%; display: block; width: 100%; height: 100%; margin: 0px; padding: 0px; background: rgb(255, 255, 255); border: 0px; opacity: 0;"></ins></div> <span data-i18n="table.splittime">Splittime</span></label></li><li role="separator" class="divider"></li><li style="white-space: nowrap;"><div class="icheckbox_square-blue" style="position: relative;"><input class="livescrollOption" name="livescrollOptionHotlist" type="checkbox" value="1" id="livescrollOptionHotlist" style="position: absolute; opacity: 0;"><ins class="iCheck-helper" style="position: absolute; top: 0%; left: 0%; display: block; width: 100%; height: 100%; margin: 0px; padding: 0px; background: rgb(255, 255, 255); border: 0px; opacity: 0;"></ins></div> <label data-i18n="hotlist.showonlyhotlist" for="livescrollOptionHotlist">Show only contestants from hotlist.</label></li><li><div class="icheckbox_square-blue" style="position: relative;"><input class="livescrollOption" name="livescrollOptionTop10" type="checkbox" value="1" id="livescrollOptionTop10" style="position: absolute; opacity: 0;"><ins class="iCheck-helper" style="position: absolute; top: 0%; left: 0%; display: block; width: 100%; height: 100%; margin: 0px; padding: 0px; background: rgb(255, 255, 255); border: 0px; opacity: 0;"></ins></div> <label data-i18n="hotlist.showonlytop10" for="livescrollOptionTop10">Show only top 10.</label></li></ul>
+                            </div>
+                            <a href="#" class="btn btn-default btn-volume-control" style="padding: 2px 4px;"><span class="fa-stack"><i class="fa fa-volume-off fa-stack-1x" style="font-size: 22px;"></i><i class="fa fa-ban fa-stack-2x text-danger"></i></span></a>
+                            <div class="btn-group group-wrap" id="livescrollOptionPoint"><div class="btn-group"><button type="button" data-filter="1308918,1308919,1308920,1308926,1308930,1335455,1335459,1335461,1335463" data-id="180520" class="btn btn-primary">Stormon</button><button type="button" class="btn btn-primary  dropdown-toggle" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false"><span class="caret"></span>                                     <span class="sr-only"></span></button>                                     <ul class="dropdown-menu"><li style="padding-left: 5px; padding-right: 5px; white-space: nowrap !important"><div class="icheckbox_square-blue checked" style="position: relative;"><input type="checkbox" checked="checked" value="1308919" id="stationrole-1308919" style="position: absolute; opacity: 0;"><ins class="iCheck-helper" style="position: absolute; top: 0%; left: 0%; display: block; width: 100%; height: 100%; margin: 0px; padding: 0px; background: rgb(255, 255, 255); border: 0px; opacity: 0;"></ins></div> <label for="stationrole-1308919">8.4 <span style="font-weight: normal; font-size: 90%;">(45 km Tävling)</span></label></li><li style="padding-left: 5px; padding-right: 5px; white-space: nowrap !important"><div class="icheckbox_square-blue checked" style="position: relative;"><input type="checkbox" checked="checked" value="1308920" id="stationrole-1308920" style="position: absolute; opacity: 0;"><ins class="iCheck-helper" style="position: absolute; top: 0%; left: 0%; display: block; width: 100%; height: 100%; margin: 0px; padding: 0px; background: rgb(255, 255, 255); border: 0px; opacity: 0;"></ins></div> <label for="stationrole-1308920">23.4 <span style="font-weight: normal; font-size: 90%;">(45 km Tävling)</span></label></li><li style="padding-left: 5px; padding-right: 5px; white-space: nowrap !important"><div class="icheckbox_square-blue checked" style="position: relative;"><input type="checkbox" checked="checked" value="1335455" id="stationrole-1335455" style="position: absolute; opacity: 0;"><ins class="iCheck-helper" style="position: absolute; top: 0%; left: 0%; display: block; width: 100%; height: 100%; margin: 0px; padding: 0px; background: rgb(255, 255, 255); border: 0px; opacity: 0;"></ins></div> <label for="stationrole-1335455">38.4 <span style="font-weight: normal; font-size: 90%;">(45 km Tävling)</span></label></li><li style="padding-left: 5px; padding-right: 5px; white-space: nowrap !important"><div class="icheckbox_square-blue checked" style="position: relative;"><input type="checkbox" checked="checked" value="1308918" id="stationrole-1308918" style="position: absolute; opacity: 0;"><ins class="iCheck-helper" style="position: absolute; top: 0%; left: 0%; display: block; width: 100%; height: 100%; margin: 0px; padding: 0px; background: rgb(255, 255, 255); border: 0px; opacity: 0;"></ins></div> <label for="stationrole-1308918">MT 1 <span style="font-weight: normal; font-size: 90%;">(30 km)</span></label></li><li style="padding-left: 5px; padding-right: 5px; white-space: nowrap !important"><div class="icheckbox_square-blue checked" style="position: relative;"><input type="checkbox" checked="checked" value="1335461" id="stationrole-1335461" style="position: absolute; opacity: 0;"><ins class="iCheck-helper" style="position: absolute; top: 0%; left: 0%; display: block; width: 100%; height: 100%; margin: 0px; padding: 0px; background: rgb(255, 255, 255); border: 0px; opacity: 0;"></ins></div> <label for="stationrole-1335461">23.4 <span style="font-weight: normal; font-size: 90%;">(30 km)</span></label></li><li style="padding-left: 5px; padding-right: 5px; white-space: nowrap !important"><div class="icheckbox_square-blue checked" style="position: relative;"><input type="checkbox" checked="checked" value="1308926" id="stationrole-1308926" style="position: absolute; opacity: 0;"><ins class="iCheck-helper" style="position: absolute; top: 0%; left: 0%; display: block; width: 100%; height: 100%; margin: 0px; padding: 0px; background: rgb(255, 255, 255); border: 0px; opacity: 0;"></ins></div> <label for="stationrole-1308926">8,4 <span style="font-weight: normal; font-size: 90%;">(45 km Motion)</span></label></li><li style="padding-left: 5px; padding-right: 5px; white-space: nowrap !important"><div class="icheckbox_square-blue checked" style="position: relative;"><input type="checkbox" checked="checked" value="1308930" id="stationrole-1308930" style="position: absolute; opacity: 0;"><ins class="iCheck-helper" style="position: absolute; top: 0%; left: 0%; display: block; width: 100%; height: 100%; margin: 0px; padding: 0px; background: rgb(255, 255, 255); border: 0px; opacity: 0;"></ins></div> <label for="stationrole-1308930">23.4 <span style="font-weight: normal; font-size: 90%;">(45 km Motion)</span></label></li><li style="padding-left: 5px; padding-right: 5px; white-space: nowrap !important"><div class="icheckbox_square-blue checked" style="position: relative;"><input type="checkbox" checked="checked" value="1335459" id="stationrole-1335459" style="position: absolute; opacity: 0;"><ins class="iCheck-helper" style="position: absolute; top: 0%; left: 0%; display: block; width: 100%; height: 100%; margin: 0px; padding: 0px; background: rgb(255, 255, 255); border: 0px; opacity: 0;"></ins></div> <label for="stationrole-1335459">38.4 <span style="font-weight: normal; font-size: 90%;">(45 km Motion)</span></label></li><li style="padding-left: 5px; padding-right: 5px; white-space: nowrap !important"><div class="icheckbox_square-blue checked" style="position: relative;"><input type="checkbox" checked="checked" value="1335463" id="stationrole-1335463" style="position: absolute; opacity: 0;"><ins class="iCheck-helper" style="position: absolute; top: 0%; left: 0%; display: block; width: 100%; height: 100%; margin: 0px; padding: 0px; background: rgb(255, 255, 255); border: 0px; opacity: 0;"></ins></div> <label for="stationrole-1335463">Stormon <span style="font-weight: normal; font-size: 90%;">(15 km)</span></label></li></ul></div><div class="btn-group"><button type="button" data-filter="1308917,1308929,1335454,1335458,1335460" data-id="180518" class="btn btn-primary">Varvning</button><button type="button" class="btn btn-primary  dropdown-toggle" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false"><span class="caret"></span>                                     <span class="sr-only"></span></button>                                     <ul class="dropdown-menu"><li style="padding-left: 5px; padding-right: 5px; white-space: nowrap !important"><div class="icheckbox_square-blue checked" style="position: relative;"><input type="checkbox" checked="checked" value="1308917" id="stationrole-1308917" style="position: absolute; opacity: 0;"><ins class="iCheck-helper" style="position: absolute; top: 0%; left: 0%; display: block; width: 100%; height: 100%; margin: 0px; padding: 0px; background: rgb(255, 255, 255); border: 0px; opacity: 0;"></ins></div> <label for="stationrole-1308917">Vauhti Sprint <span style="font-weight: normal; font-size: 90%;">(45 km Tävling)</span></label></li><li style="padding-left: 5px; padding-right: 5px; white-space: nowrap !important"><div class="icheckbox_square-blue checked" style="position: relative;"><input type="checkbox" checked="checked" value="1335454" id="stationrole-1335454" style="position: absolute; opacity: 0;"><ins class="iCheck-helper" style="position: absolute; top: 0%; left: 0%; display: block; width: 100%; height: 100%; margin: 0px; padding: 0px; background: rgb(255, 255, 255); border: 0px; opacity: 0;"></ins></div> <label for="stationrole-1335454">Varv 2 <span style="font-weight: normal; font-size: 90%;">(45 km Tävling)</span></label></li><li style="padding-left: 5px; padding-right: 5px; white-space: nowrap !important"><div class="icheckbox_square-blue checked" style="position: relative;"><input type="checkbox" checked="checked" value="1335460" id="stationrole-1335460" style="position: absolute; opacity: 0;"><ins class="iCheck-helper" style="position: absolute; top: 0%; left: 0%; display: block; width: 100%; height: 100%; margin: 0px; padding: 0px; background: rgb(255, 255, 255); border: 0px; opacity: 0;"></ins></div> <label for="stationrole-1335460">Vauhti Sprint <span style="font-weight: normal; font-size: 90%;">(30 km)</span></label></li><li style="padding-left: 5px; padding-right: 5px; white-space: nowrap !important"><div class="icheckbox_square-blue checked" style="position: relative;"><input type="checkbox" checked="checked" value="1308929" id="stationrole-1308929" style="position: absolute; opacity: 0;"><ins class="iCheck-helper" style="position: absolute; top: 0%; left: 0%; display: block; width: 100%; height: 100%; margin: 0px; padding: 0px; background: rgb(255, 255, 255); border: 0px; opacity: 0;"></ins></div> <label for="stationrole-1308929">Vauhti Sprint <span style="font-weight: normal; font-size: 90%;">(45 km Motion)</span></label></li><li style="padding-left: 5px; padding-right: 5px; white-space: nowrap !important"><div class="icheckbox_square-blue checked" style="position: relative;"><input type="checkbox" checked="checked" value="1335458" id="stationrole-1335458" style="position: absolute; opacity: 0;"><ins class="iCheck-helper" style="position: absolute; top: 0%; left: 0%; display: block; width: 100%; height: 100%; margin: 0px; padding: 0px; background: rgb(255, 255, 255); border: 0px; opacity: 0;"></ins></div> <label for="stationrole-1335458">Varv 2 <span style="font-weight: normal; font-size: 90%;">(45 km Motion)</span></label></li></ul></div><div class="btn-group"><button type="button" data-filter="1308924,1308925,1308933,1335465" data-id="180522" class="btn btn-primary">Mål</button><button type="button" class="btn btn-primary  dropdown-toggle" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false"><span class="caret"></span>                                     <span class="sr-only"></span></button>                                     <ul class="dropdown-menu"><li style="padding-left: 5px; padding-right: 5px; white-space: nowrap !important"><div class="icheckbox_square-blue checked" style="position: relative;"><input type="checkbox" checked="checked" value="1308925" id="stationrole-1308925" style="position: absolute; opacity: 0;"><ins class="iCheck-helper" style="position: absolute; top: 0%; left: 0%; display: block; width: 100%; height: 100%; margin: 0px; padding: 0px; background: rgb(255, 255, 255); border: 0px; opacity: 0;"></ins></div> <label for="stationrole-1308925">Mål <span style="font-weight: normal; font-size: 90%;">(45 km Tävling)</span></label></li><li style="padding-left: 5px; padding-right: 5px; white-space: nowrap !important"><div class="icheckbox_square-blue checked" style="position: relative;"><input type="checkbox" checked="checked" value="1308924" id="stationrole-1308924" style="position: absolute; opacity: 0;"><ins class="iCheck-helper" style="position: absolute; top: 0%; left: 0%; display: block; width: 100%; height: 100%; margin: 0px; padding: 0px; background: rgb(255, 255, 255); border: 0px; opacity: 0;"></ins></div> <label for="stationrole-1308924">Mål <span style="font-weight: normal; font-size: 90%;">(30 km)</span></label></li><li style="padding-left: 5px; padding-right: 5px; white-space: nowrap !important"><div class="icheckbox_square-blue checked" style="position: relative;"><input type="checkbox" checked="checked" value="1308933" id="stationrole-1308933" style="position: absolute; opacity: 0;"><ins class="iCheck-helper" style="position: absolute; top: 0%; left: 0%; display: block; width: 100%; height: 100%; margin: 0px; padding: 0px; background: rgb(255, 255, 255); border: 0px; opacity: 0;"></ins></div> <label for="stationrole-1308933">Mål <span style="font-weight: normal; font-size: 90%;">(45 km Motion)</span></label></li><li style="padding-left: 5px; padding-right: 5px; white-space: nowrap !important"><div class="icheckbox_square-blue checked" style="position: relative;"><input type="checkbox" checked="checked" value="1335465" id="stationrole-1335465" style="position: absolute; opacity: 0;"><ins class="iCheck-helper" style="position: absolute; top: 0%; left: 0%; display: block; width: 100%; height: 100%; margin: 0px; padding: 0px; background: rgb(255, 255, 255); border: 0px; opacity: 0;"></ins></div> <label for="stationrole-1335465">Mål <span style="font-weight: normal; font-size: 90%;">(15 km)</span></label></li></ul></div></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row" id="resultContent" data-element="content">
+                    <div class="pull-right">
+                        <ul class="pagination"></ul>
+                    </div>
+
+                    <table class="table table-condensed table-striped ss-ranktotal ss-rankgender ss-rank ss-bib ss-name ss-nation ss-club ss-class ss-point ss-time ss-difftime" id="livescrollResult" data-element="contestantTable">
+                        <thead>
+                            <tr>
+                                <th class="col-ranktotal-scroll"><i class="fas fa-users"></i></th>
+                                <th class="col-rankgender-scroll"><i class="fas fa-venus-mars"></i></th>
+                                <th class="col-rank-scroll"><i class="fas fa-user-alt" style="font-size: 80%"></i><i class="far fa-user-alt" style="font-size: 80%; margin-left:-3px;"></i></th>
+                                <th class="col-bib-scroll" data-i18n="table.bib">#</th>
+                                <th class="col-name-scroll" data-i18n="table.name">Name</th>
+                                <th class="col-nation-scroll" data-i18n="table.nation">Nation</th>
+                                <th class="col-club-scroll" data-i18n="table.club">Club</th>
+                                <th class="col-coinfo-scroll" data-i18n="table.coinfo"></th>
+                                <th class="col-coinfo-scroll" data-i18n="table.coinfo2"></th>
+                                <th class="col-class-scroll" data-i18n="table.classes">Class</th>
+                                <th class="col-rankclass-scroll"><i class="fas fa-user-alt" style="font-size: 80%"></i><i class="far fa-user-alt" style="font-size: 80%; margin-left:-3px;"></i></th>
+                                <th class="col-race-scroll" data-i18n="table.race">Race</th>
+                                <th class="col-point-scroll" data-i18n="table.point">Point</th>
+                                <th class="col-lap-scroll" data-i18n="table.lap">Lap</th>
+                                <th class="col-timeofday-scroll"><i class="fal fa-clock"></i></th>
+                                <th class="col-time-scroll" data-i18n="table.time">Time</th>
+                                <th class="col-difftime-scroll" data-i18n="table.difftime">Behind</th>
+                                <th class="col-splittime-scroll" data-i18n="table.splittime">Splittime</th>
+                                <th class="col-additional-scroll" data-i18n="table.additional" data-i18ncondition="racetype">Extra</th>
+                            </tr>
+                        </thead>
+                        <tbody><tr data-gender="m" class="rank-61" data-id="14985292-1308933-1" data-contestantid="13026075">                     <td class="col-ranktotal-scroll  rank-80"><span>80</span></td>                     <td class="col-rankgender-scroll  rank-61"><span>61</span></td>                     <td class="col-rank-scroll "><span>61</span></td>                     <td class="col-bib-scroll ">                                                      663                                              </td>                     <td class="col-name-scroll ">                                                      <strong><span class="field-bib-scroll">663. </span> <span class="field-nation-scroll flag-icon flag-icon-se"></span> Kristofer <b>Grahn</b></strong>                              <div class="field-coinfo field-teammates-scroll">                                                               </div>                                                  <div class="field-club-scroll">AXA SC</div>                     </td>                     <td class="col-nation-scroll "><span class="flag-icon flag-icon-se"></span> SWE</td>                     <td class="col-club-scroll "><div class="col-wrapper">                                     AXA SC&nbsp;                                                                              <div class="field-coinfo field-teammates">                                                                                      </div>                                                                      </div></td>                     <td class="col-coinfo-scroll ">                                                                                  <div class="field-teammates">                                                                                      </div>                                                              </td>                     <td class="col-coinfo2-scroll ">                                                                                                       </td>                     <td class="col-class-scroll ">                         Herrar Motion                     </td>                     <td class="col-rankclass-scroll "><span>61</span></td>                     <td class="col-race-scroll ">45 km Motion</td>                     <td class="col-point-scroll ">Mål</td>                     <td class="col-lap-scroll ">1</td>                     <td class="col-timeofday-scroll ">16:32:36</td>                     <td class="col-time-scroll ">                                                                                                                                                                 <span class="field-time-scroll">5:22:36.4</span><span class="field-difftime-scroll">+2:35:09.3</span>                                                                                        </td>                     <td class="col-difftime-scroll ">                                                                                       +2:35:09.3                                                                           </td>                     <td class="col-splittime-scroll ">                                                                                       48:28.3                                                                           </td>                     <td class="col-additional-scroll "></td>                    </tr><tr data-gender="f" class="rank-19" data-id="14985250-1308933-1" data-contestantid="13026033">                     <td class="col-ranktotal-scroll  rank-79"><span>79</span></td>                     <td class="col-rankgender-scroll  rank-19"><span>19</span></td>                     <td class="col-rank-scroll "><span>19</span></td>                     <td class="col-bib-scroll ">                                                      618                                              </td>                     <td class="col-name-scroll ">                                                      <strong><span class="field-bib-scroll">618. </span> <span class="field-nation-scroll flag-icon flag-icon-se"></span> Nelly <b>Sandström</b></strong>                              <div class="field-coinfo field-teammates-scroll">                                                               </div>                                                  <div class="field-club-scroll">Nacka Värmdö Skidklubb</div>                     </td>                     <td class="col-nation-scroll "><span class="flag-icon flag-icon-se"></span> SWE</td>                     <td class="col-club-scroll "><div class="col-wrapper">                                     Nacka Värmdö Skidklubb&nbsp;                                                                              <div class="field-coinfo field-teammates">                                                                                      </div>                                                                      </div></td>                     <td class="col-coinfo-scroll ">                                                                                  <div class="field-teammates">                                                                                      </div>                                                              </td>                     <td class="col-coinfo2-scroll ">                                                                                                       </td>                     <td class="col-class-scroll ">                         Damer Motion                     </td>                     <td class="col-rankclass-scroll "><span>19</span></td>                     <td class="col-race-scroll ">45 km Motion</td>                     <td class="col-point-scroll ">Mål</td>                     <td class="col-lap-scroll ">1</td>                     <td class="col-timeofday-scroll ">16:31:10</td>                     <td class="col-time-scroll ">                                                                                                                                                                 <span class="field-time-scroll">5:21:10.7</span><span class="field-difftime-scroll">+2:14:15.9</span>                                                                                        </td>                     <td class="col-difftime-scroll ">                                                                                       +2:14:15.9                                                                           </td>                     <td class="col-splittime-scroll ">                                                                                       46:04.8                                                                           </td>                     <td class="col-additional-scroll "></td>                    </tr><tr data-gender="f" class="rank-18" data-id="14985277-1308933-1" data-contestantid="13026060">                     <td class="col-ranktotal-scroll  rank-78"><span>78</span></td>                     <td class="col-rankgender-scroll  rank-18"><span>18</span></td>                     <td class="col-rank-scroll "><span>18</span></td>                     <td class="col-bib-scroll ">                                                      648                                              </td>                     <td class="col-name-scroll ">                                                      <strong><span class="field-bib-scroll">648. </span> <span class="field-nation-scroll flag-icon flag-icon-se"></span> Johanna <b>Carlsson</b></strong>                              <div class="field-coinfo field-teammates-scroll">                                                               </div>                                                  <div class="field-club-scroll"></div>                     </td>                     <td class="col-nation-scroll "><span class="flag-icon flag-icon-se"></span> SWE</td>                     <td class="col-club-scroll "><div class="col-wrapper">                                     &nbsp;                                                                              <div class="field-coinfo field-teammates">                                                                                      </div>                                                                      </div></td>                     <td class="col-coinfo-scroll ">                                                                                  <div class="field-teammates">                                                                                      </div>                                                              </td>                     <td class="col-coinfo2-scroll ">                                                                                                       </td>                     <td class="col-class-scroll ">                         Damer Motion                     </td>                     <td class="col-rankclass-scroll "><span>18</span></td>                     <td class="col-race-scroll ">45 km Motion</td>                     <td class="col-point-scroll ">Mål</td>                     <td class="col-lap-scroll ">1</td>                     <td class="col-timeofday-scroll ">16:24:59</td>                     <td class="col-time-scroll ">                                                                                                                                                                 <span class="field-time-scroll">5:14:59.6</span><span class="field-difftime-scroll">+2:08:04.8</span>                                                                                        </td>                     <td class="col-difftime-scroll ">                                                                                       +2:08:04.8                                                                           </td>                     <td class="col-splittime-scroll ">                                                                                       43:28.3                                                                           </td>                     <td class="col-additional-scroll "></td>                    </tr><tr data-gender="m" class="rank-60" data-id="14985276-1308933-1" data-contestantid="13026059">                     <td class="col-ranktotal-scroll  rank-77"><span>77</span></td>                     <td class="col-rankgender-scroll  rank-60"><span>60</span></td>                     <td class="col-rank-scroll "><span>60</span></td>                     <td class="col-bib-scroll ">                                                      647                                              </td>                     <td class="col-name-scroll ">                                                      <strong><span class="field-bib-scroll">647. </span> <span class="field-nation-scroll flag-icon flag-icon-se"></span> Michael <b>Edquist</b></strong>                              <div class="field-coinfo field-teammates-scroll">                                                               </div>                                                  <div class="field-club-scroll"></div>                     </td>                     <td class="col-nation-scroll "><span class="flag-icon flag-icon-se"></span> SWE</td>                     <td class="col-club-scroll "><div class="col-wrapper">                                     &nbsp;                                                                              <div class="field-coinfo field-teammates">                                                                                      </div>                                                                      </div></td>                     <td class="col-coinfo-scroll ">                                                                                  <div class="field-teammates">                                                                                      </div>                                                              </td>                     <td class="col-coinfo2-scroll ">                                                                                                       </td>                     <td class="col-class-scroll ">                         Herrar Motion                     </td>                     <td class="col-rankclass-scroll "><span>60</span></td>                     <td class="col-race-scroll ">45 km Motion</td>                     <td class="col-point-scroll ">Mål</td>                     <td class="col-lap-scroll ">1</td>                     <td class="col-timeofday-scroll ">16:24:59</td>                     <td class="col-time-scroll ">                                                                                                                                                                 <span class="field-time-scroll">5:14:59.5</span><span class="field-difftime-scroll">+2:27:32.4</span>                                                                                        </td>                     <td class="col-difftime-scroll ">                                                                                       +2:27:32.4                                                                           </td>                     <td class="col-splittime-scroll ">                                                                                       43:31.9                                                                           </td>                     <td class="col-additional-scroll "></td>                    </tr><tr data-gender="m" class="rank-59" data-id="14985310-1308933-1" data-contestantid="13026093">                     <td class="col-ranktotal-scroll  rank-76"><span>76</span></td>                     <td class="col-rankgender-scroll  rank-59"><span>59</span></td>                     <td class="col-rank-scroll "><span>59</span></td>                     <td class="col-bib-scroll ">                                                      680                                              </td>                     <td class="col-name-scroll ">                                                      <strong><span class="field-bib-scroll">680. </span> <span class="field-nation-scroll flag-icon flag-icon-se"></span> William <b>Rolin</b></strong>                              <div class="field-coinfo field-teammates-scroll">                                                               </div>                                                  <div class="field-club-scroll">Axa SC</div>                     </td>                     <td class="col-nation-scroll "><span class="flag-icon flag-icon-se"></span> SWE</td>                     <td class="col-club-scroll "><div class="col-wrapper">                                     Axa SC&nbsp;                                                                              <div class="field-coinfo field-teammates">                                                                                      </div>                                                                      </div></td>                     <td class="col-coinfo-scroll ">                                                                                  <div class="field-teammates">                                                                                      </div>                                                              </td>                     <td class="col-coinfo2-scroll ">                                                                                                       </td>                     <td class="col-class-scroll ">                         Herrar Motion                     </td>                     <td class="col-rankclass-scroll "><span>59</span></td>                     <td class="col-race-scroll ">45 km Motion</td>                     <td class="col-point-scroll ">Mål</td>                     <td class="col-lap-scroll ">1</td>                     <td class="col-timeofday-scroll ">16:17:48</td>                     <td class="col-time-scroll ">                                                                                                                                                                 <span class="field-time-scroll">5:07:48.3</span><span class="field-difftime-scroll">+2:20:21.2</span>                                                                                        </td>                     <td class="col-difftime-scroll ">                                                                                       +2:20:21.2                                                                           </td>                     <td class="col-splittime-scroll ">                                                                                       44:15.5                                                                           </td>                     <td class="col-additional-scroll "></td>                    </tr><tr data-gender="m" class="rank-58" data-id="14985314-1308933-1" data-contestantid="13026097">                     <td class="col-ranktotal-scroll  rank-75"><span>75</span></td>                     <td class="col-rankgender-scroll  rank-58"><span>58</span></td>                     <td class="col-rank-scroll "><span>58</span></td>                     <td class="col-bib-scroll ">                                                      684                                              </td>                     <td class="col-name-scroll ">                                                      <strong><span class="field-bib-scroll">684. </span> <span class="field-nation-scroll flag-icon flag-icon-se"></span> Daniel <b>Wahlgren</b></strong>                              <div class="field-coinfo field-teammates-scroll">                                                               </div>                                                  <div class="field-club-scroll">Norrtälje</div>                     </td>                     <td class="col-nation-scroll "><span class="flag-icon flag-icon-se"></span> SWE</td>                     <td class="col-club-scroll "><div class="col-wrapper">                                     Norrtälje&nbsp;                                                                              <div class="field-coinfo field-teammates">                                                                                      </div>                                                                      </div></td>                     <td class="col-coinfo-scroll ">                                                                                  <div class="field-teammates">                                                                                      </div>                                                              </td>                     <td class="col-coinfo2-scroll ">                                                                                                       </td>                     <td class="col-class-scroll ">                         Herrar Motion                     </td>                     <td class="col-rankclass-scroll "><span>58</span></td>                     <td class="col-race-scroll ">45 km Motion</td>                     <td class="col-point-scroll ">Mål</td>                     <td class="col-lap-scroll ">1</td>                     <td class="col-timeofday-scroll ">16:14:43</td>                     <td class="col-time-scroll ">                                                                                                                                                                 <span class="field-time-scroll">5:04:43.8</span><span class="field-difftime-scroll">+2:17:16.7</span>                                                                                        </td>                     <td class="col-difftime-scroll ">                                                                                       +2:17:16.7                                                                           </td>                     <td class="col-splittime-scroll ">                                                                                       43:46.0                                                                           </td>                     <td class="col-additional-scroll "></td>                    </tr><tr data-gender="f" class="rank-17" data-id="14985234-1308933-1" data-contestantid="13026017">                     <td class="col-ranktotal-scroll  rank-74"><span>74</span></td>                     <td class="col-rankgender-scroll  rank-17"><span>17</span></td>                     <td class="col-rank-scroll "><span>17</span></td>                     <td class="col-bib-scroll ">                                                      602                                              </td>                     <td class="col-name-scroll ">                                                      <strong><span class="field-bib-scroll">602. </span> <span class="field-nation-scroll flag-icon flag-icon-se"></span> Elin <b>Bäckström</b></strong>                              <div class="field-coinfo field-teammates-scroll">                                                               </div>                                                  <div class="field-club-scroll"></div>                     </td>                     <td class="col-nation-scroll "><span class="flag-icon flag-icon-se"></span> SWE</td>                     <td class="col-club-scroll "><div class="col-wrapper">                                     &nbsp;                                                                              <div class="field-coinfo field-teammates">                                                                                      </div>                                                                      </div></td>                     <td class="col-coinfo-scroll ">                                                                                  <div class="field-teammates">                                                                                      </div>                                                              </td>                     <td class="col-coinfo2-scroll ">                                                                                                       </td>                     <td class="col-class-scroll ">                         Damer Motion                     </td>                     <td class="col-rankclass-scroll "><span>17</span></td>                     <td class="col-race-scroll ">45 km Motion</td>                     <td class="col-point-scroll ">Mål</td>                     <td class="col-lap-scroll ">1</td>                     <td class="col-timeofday-scroll ">16:10:55</td>                     <td class="col-time-scroll ">                                                                                                                                                                 <span class="field-time-scroll">5:00:55.6</span><span class="field-difftime-scroll">+1:54:00.8</span>                                                                                        </td>                     <td class="col-difftime-scroll ">                                                                                       +1:54:00.8                                                                           </td>                     <td class="col-splittime-scroll ">                                                                                       43:10.5                                                                           </td>                     <td class="col-additional-scroll "></td>                    </tr><tr data-gender="m" class="rank-57" data-id="14985296-1308933-1" data-contestantid="13026079">                     <td class="col-ranktotal-scroll  rank-73"><span>73</span></td>                     <td class="col-rankgender-scroll  rank-57"><span>57</span></td>                     <td class="col-rank-scroll "><span>57</span></td>                     <td class="col-bib-scroll ">                                                      666                                              </td>                     <td class="col-name-scroll ">                                                      <strong><span class="field-bib-scroll">666. </span> <span class="field-nation-scroll flag-icon flag-icon-se"></span> Gabriel <b>Afram</b></strong>                              <div class="field-coinfo field-teammates-scroll">                                                               </div>                                                  <div class="field-club-scroll"></div>                     </td>                     <td class="col-nation-scroll "><span class="flag-icon flag-icon-se"></span> SWE</td>                     <td class="col-club-scroll "><div class="col-wrapper">                                     &nbsp;                                                                              <div class="field-coinfo field-teammates">                                                                                      </div>                                                                      </div></td>                     <td class="col-coinfo-scroll ">                                                                                  <div class="field-teammates">                                                                                      </div>                                                              </td>                     <td class="col-coinfo2-scroll ">                                                                                                       </td>                     <td class="col-class-scroll ">                         Herrar Motion                     </td>                     <td class="col-rankclass-scroll "><span>57</span></td>                     <td class="col-race-scroll ">45 km Motion</td>                     <td class="col-point-scroll ">Mål</td>                     <td class="col-lap-scroll ">1</td>                     <td class="col-timeofday-scroll ">16:10:47</td>                     <td class="col-time-scroll ">                                                                                                                                                                 <span class="field-time-scroll">5:00:47.5</span><span class="field-difftime-scroll">+2:13:20.4</span>                                                                                        </td>                     <td class="col-difftime-scroll ">                                                                                       +2:13:20.4                                                                           </td>                     <td class="col-splittime-scroll ">                                                                                       43:02.1                                                                           </td>                     <td class="col-additional-scroll "></td>                    </tr><tr data-gender="m" class="rank-56" data-id="14985275-1308933-1" data-contestantid="13026058">                     <td class="col-ranktotal-scroll  rank-72"><span>72</span></td>                     <td class="col-rankgender-scroll  rank-56"><span>56</span></td>                     <td class="col-rank-scroll "><span>56</span></td>                     <td class="col-bib-scroll ">                                                      645                                              </td>                     <td class="col-name-scroll ">                                                      <strong><span class="field-bib-scroll">645. </span> <span class="field-nation-scroll flag-icon flag-icon-dk"></span> Gyula <b>Szathmary</b></strong>                              <div class="field-coinfo field-teammates-scroll">                                                               </div>                                                  <div class="field-club-scroll"></div>                     </td>                     <td class="col-nation-scroll "><span class="flag-icon flag-icon-dk"></span> DEN</td>                     <td class="col-club-scroll "><div class="col-wrapper">                                     &nbsp;                                                                              <div class="field-coinfo field-teammates">                                                                                      </div>                                                                      </div></td>                     <td class="col-coinfo-scroll ">                                                                                  <div class="field-teammates">                                                                                      </div>                                                              </td>                     <td class="col-coinfo2-scroll ">                                                                                                       </td>                     <td class="col-class-scroll ">                         Herrar Motion                     </td>                     <td class="col-rankclass-scroll "><span>56</span></td>                     <td class="col-race-scroll ">45 km Motion</td>                     <td class="col-point-scroll ">Mål</td>                     <td class="col-lap-scroll ">1</td>                     <td class="col-timeofday-scroll ">16:07:38</td>                     <td class="col-time-scroll ">                                                                                                                                                                 <span class="field-time-scroll">4:57:38.5</span><span class="field-difftime-scroll">+2:10:11.4</span>                                                                                        </td>                     <td class="col-difftime-scroll ">                                                                                       +2:10:11.4                                                                           </td>                     <td class="col-splittime-scroll ">                                                                                       46:43.8                                                                           </td>                     <td class="col-additional-scroll "></td>                    </tr><tr data-gender="m" class="rank-41" data-id="14984648-1308925-1" data-contestantid="13025431">                     <td class="col-ranktotal-scroll  rank-504"><span>504</span></td>                     <td class="col-rankgender-scroll  rank-444"><span>444</span></td>                     <td class="col-rank-scroll "><span>41</span></td>                     <td class="col-bib-scroll ">                                                      152                                              </td>                     <td class="col-name-scroll ">                                                      <strong><span class="field-bib-scroll">152. </span> <span class="field-nation-scroll flag-icon flag-icon-dk"></span> Henrik <b>Bang</b></strong>                              <div class="field-coinfo field-teammates-scroll">                                                               </div>                                                  <div class="field-club-scroll">HSOK</div>                     </td>                     <td class="col-nation-scroll "><span class="flag-icon flag-icon-dk"></span> DEN</td>                     <td class="col-club-scroll "><div class="col-wrapper">                                     HSOK&nbsp;                                                                              <div class="field-coinfo field-teammates">                                                                                      </div>                                                                      </div></td>                     <td class="col-coinfo-scroll ">                                                                                  <div class="field-teammates">                                                                                      </div>                                                              </td>                     <td class="col-coinfo2-scroll ">                                                                                                       </td>                     <td class="col-class-scroll ">                         Herrar 60-                     </td>                     <td class="col-rankclass-scroll "><span>41</span></td>                     <td class="col-race-scroll ">45 km Tävling</td>                     <td class="col-point-scroll ">Mål</td>                     <td class="col-lap-scroll ">1</td>                     <td class="col-timeofday-scroll ">16:06:13</td>                     <td class="col-time-scroll ">                                                                                                                                                                 <span class="field-time-scroll">5:06:13.3</span><span class="field-difftime-scroll">+2:41:48.3</span>                                                                                        </td>                     <td class="col-difftime-scroll ">                                                                                       +2:41:48.3                                                                           </td>                     <td class="col-splittime-scroll ">                                                                                       50:27.5                                                                           </td>                     <td class="col-additional-scroll "></td>                    </tr><tr data-gender="m" class="rank-55" data-id="14985315-1308933-1" data-contestantid="13026098">                     <td class="col-ranktotal-scroll  rank-71"><span>71</span></td>                     <td class="col-rankgender-scroll  rank-55"><span>55</span></td>                     <td class="col-rank-scroll "><span>55</span></td>                     <td class="col-bib-scroll ">                                                      685                                              </td>                     <td class="col-name-scroll ">                                                      <strong><span class="field-bib-scroll">685. </span> <span class="field-nation-scroll flag-icon flag-icon-se"></span> Mikael <b>Bergkvist</b></strong>                              <div class="field-coinfo field-teammates-scroll">                                                               </div>                                                  <div class="field-club-scroll"></div>                     </td>                     <td class="col-nation-scroll "><span class="flag-icon flag-icon-se"></span> SWE</td>                     <td class="col-club-scroll "><div class="col-wrapper">                                     &nbsp;                                                                              <div class="field-coinfo field-teammates">                                                                                      </div>                                                                      </div></td>                     <td class="col-coinfo-scroll ">                                                                                  <div class="field-teammates">                                                                                      </div>                                                              </td>                     <td class="col-coinfo2-scroll ">                                                                                                       </td>                     <td class="col-class-scroll ">                         Herrar Motion                     </td>                     <td class="col-rankclass-scroll "><span>55</span></td>                     <td class="col-race-scroll ">45 km Motion</td>                     <td class="col-point-scroll ">Mål</td>                     <td class="col-lap-scroll ">1</td>                     <td class="col-timeofday-scroll ">16:01:48</td>                     <td class="col-time-scroll ">                                                                                                                                                                 <span class="field-time-scroll">4:51:48.9</span><span class="field-difftime-scroll">+2:04:21.8</span>                                                                                        </td>                     <td class="col-difftime-scroll ">                                                                                       +2:04:21.8                                                                           </td>                     <td class="col-splittime-scroll ">                                                                                       44:20.2                                                                           </td>                     <td class="col-additional-scroll "></td>                    </tr><tr data-gender="f" class="rank-16" data-id="14985320-1308933-1" data-contestantid="13026103">                     <td class="col-ranktotal-scroll  rank-70"><span>70</span></td>                     <td class="col-rankgender-scroll  rank-16"><span>16</span></td>                     <td class="col-rank-scroll "><span>16</span></td>                     <td class="col-bib-scroll ">                                                      690                                              </td>                     <td class="col-name-scroll ">                                                      <strong><span class="field-bib-scroll">690. </span> <span class="field-nation-scroll flag-icon flag-icon-se"></span> Ida <b>Lunå</b></strong>                              <div class="field-coinfo field-teammates-scroll">                                                               </div>                                                  <div class="field-club-scroll">Falu IK</div>                     </td>                     <td class="col-nation-scroll "><span class="flag-icon flag-icon-se"></span> SWE</td>                     <td class="col-club-scroll "><div class="col-wrapper">                                     Falu IK&nbsp;                                                                              <div class="field-coinfo field-teammates">                                                                                      </div>                                                                      </div></td>                     <td class="col-coinfo-scroll ">                                                                                  <div class="field-teammates">                                                                                      </div>                                                              </td>                     <td class="col-coinfo2-scroll ">                                                                                                       </td>                     <td class="col-class-scroll ">                         Damer Motion                     </td>                     <td class="col-rankclass-scroll "><span>16</span></td>                     <td class="col-race-scroll ">45 km Motion</td>                     <td class="col-point-scroll ">Mål</td>                     <td class="col-lap-scroll ">1</td>                     <td class="col-timeofday-scroll ">16:01:14</td>                     <td class="col-time-scroll ">                                                                                                                                                                 <span class="field-time-scroll">4:51:14.4</span><span class="field-difftime-scroll">+1:44:19.6</span>                                                                                        </td>                     <td class="col-difftime-scroll ">                                                                                       +1:44:19.6                                                                           </td>                     <td class="col-splittime-scroll ">                                                                                       43:51.0                                                                           </td>                     <td class="col-additional-scroll "></td>                    </tr><tr data-gender="m" class="rank-54" data-id="14990397-1308933-1" data-contestantid="13030708">                     <td class="col-ranktotal-scroll  rank-69"><span>69</span></td>                     <td class="col-rankgender-scroll  rank-54"><span>54</span></td>                     <td class="col-rank-scroll "><span>54</span></td>                     <td class="col-bib-scroll ">                                                      713                                              </td>                     <td class="col-name-scroll ">                                                      <strong><span class="field-bib-scroll">713. </span> <span class="field-nation-scroll flag-icon flag-icon-se"></span> Olle <b>Ljungblom</b></strong>                              <div class="field-coinfo field-teammates-scroll">                                                               </div>                                                  <div class="field-club-scroll">Axa sc</div>                     </td>                     <td class="col-nation-scroll "><span class="flag-icon flag-icon-se"></span> SWE</td>                     <td class="col-club-scroll "><div class="col-wrapper">                                     Axa sc&nbsp;                                                                              <div class="field-coinfo field-teammates">                                                                                      </div>                                                                      </div></td>                     <td class="col-coinfo-scroll ">                                                                                  <div class="field-teammates">                                                                                      </div>                                                              </td>                     <td class="col-coinfo2-scroll ">                                                                                                       </td>                     <td class="col-class-scroll ">                         Herrar Motion                     </td>                     <td class="col-rankclass-scroll "><span>54</span></td>                     <td class="col-race-scroll ">45 km Motion</td>                     <td class="col-point-scroll ">Mål</td>                     <td class="col-lap-scroll ">1</td>                     <td class="col-timeofday-scroll ">15:59:23</td>                     <td class="col-time-scroll ">                                                                                                                                                                 <span class="field-time-scroll">4:49:23.2</span><span class="field-difftime-scroll">+2:01:56.1</span>                                                                                        </td>                     <td class="col-difftime-scroll ">                                                                                       +2:01:56.1                                                                           </td>                     <td class="col-splittime-scroll ">                                                                                       46:55.1                                                                           </td>                     <td class="col-additional-scroll "></td>                    </tr><tr data-gender="f" class="rank-15" data-id="14990480-1308933-1" data-contestantid="13030791">                     <td class="col-ranktotal-scroll  rank-68"><span>68</span></td>                     <td class="col-rankgender-scroll  rank-15"><span>15</span></td>                     <td class="col-rank-scroll "><span>15</span></td>                     <td class="col-bib-scroll ">                                                      714                                              </td>                     <td class="col-name-scroll ">                                                      <strong><span class="field-bib-scroll">714. </span> <span class="field-nation-scroll flag-icon flag-icon-se"></span> My <b>Nilsson Ringqvist</b></strong>                              <div class="field-coinfo field-teammates-scroll">                                                               </div>                                                  <div class="field-club-scroll">Axa SC</div>                     </td>                     <td class="col-nation-scroll "><span class="flag-icon flag-icon-se"></span> SWE</td>                     <td class="col-club-scroll "><div class="col-wrapper">                                     Axa SC&nbsp;                                                                              <div class="field-coinfo field-teammates">                                                                                      </div>                                                                      </div></td>                     <td class="col-coinfo-scroll ">                                                                                  <div class="field-teammates">                                                                                      </div>                                                              </td>                     <td class="col-coinfo2-scroll ">                                                                                                       </td>                     <td class="col-class-scroll ">                         Damer Motion                     </td>                     <td class="col-rankclass-scroll "><span>15</span></td>                     <td class="col-race-scroll ">45 km Motion</td>                     <td class="col-point-scroll ">Mål</td>                     <td class="col-lap-scroll ">1</td>                     <td class="col-timeofday-scroll ">15:59:22</td>                     <td class="col-time-scroll ">                                                                                                                                                                 <span class="field-time-scroll">4:49:22.2</span><span class="field-difftime-scroll">+1:42:27.4</span>                                                                                        </td>                     <td class="col-difftime-scroll ">                                                                                       +1:42:27.4                                                                           </td>                     <td class="col-splittime-scroll ">                                                                                       46:49.2                                                                           </td>                     <td class="col-additional-scroll "></td>                    </tr><tr data-gender="m" class="rank-40" data-id="14985035-1308925-1" data-contestantid="13025818">                     <td class="col-ranktotal-scroll  rank-503"><span>503</span></td>                     <td class="col-rankgender-scroll  rank-443"><span>443</span></td>                     <td class="col-rank-scroll "><span>40</span></td>                     <td class="col-bib-scroll ">                                                      544                                              </td>                     <td class="col-name-scroll ">                                                      <strong><span class="field-bib-scroll">544. </span> <span class="field-nation-scroll flag-icon flag-icon-se"></span> Per <b>Westman</b></strong>                              <div class="field-coinfo field-teammates-scroll">                                                               </div>                                                  <div class="field-club-scroll">enebyberg</div>                     </td>                     <td class="col-nation-scroll "><span class="flag-icon flag-icon-se"></span> SWE</td>                     <td class="col-club-scroll "><div class="col-wrapper">                                     enebyberg&nbsp;                                                                              <div class="field-coinfo field-teammates">                                                                                      </div>                                                                      </div></td>                     <td class="col-coinfo-scroll ">                                                                                  <div class="field-teammates">                                                                                      </div>                                                              </td>                     <td class="col-coinfo2-scroll ">                                                                                                       </td>                     <td class="col-class-scroll ">                         Herrar 60-                     </td>                     <td class="col-rankclass-scroll "><span>40</span></td>                     <td class="col-race-scroll ">45 km Tävling</td>                     <td class="col-point-scroll ">Mål</td>                     <td class="col-lap-scroll ">1</td>                     <td class="col-timeofday-scroll ">15:56:19</td>                     <td class="col-time-scroll ">                                                                                                                                                                 <span class="field-time-scroll">4:56:19.3</span><span class="field-difftime-scroll">+2:31:54.3</span>                                                                                        </td>                     <td class="col-difftime-scroll ">                                                                                       +2:31:54.3                                                                           </td>                     <td class="col-splittime-scroll ">                                                                                       48:12.8                                                                           </td>                     <td class="col-additional-scroll "></td>                    </tr><tr data-gender="m" class="rank-53" data-id="14985290-1308933-1" data-contestantid="13026073">                     <td class="col-ranktotal-scroll  rank-67"><span>67</span></td>                     <td class="col-rankgender-scroll  rank-53"><span>53</span></td>                     <td class="col-rank-scroll "><span>53</span></td>                     <td class="col-bib-scroll ">                                                      661                                              </td>                     <td class="col-name-scroll ">                                                      <strong><span class="field-bib-scroll">661. </span> <span class="field-nation-scroll flag-icon flag-icon-se"></span> Sylvain <b>Dondey</b></strong>                              <div class="field-coinfo field-teammates-scroll">                                                               </div>                                                  <div class="field-club-scroll"></div>                     </td>                     <td class="col-nation-scroll "><span class="flag-icon flag-icon-se"></span> SWE</td>                     <td class="col-club-scroll "><div class="col-wrapper">                                     &nbsp;                                                                              <div class="field-coinfo field-teammates">                                                                                      </div>                                                                      </div></td>                     <td class="col-coinfo-scroll ">                                                                                  <div class="field-teammates">                                                                                      </div>                                                              </td>                     <td class="col-coinfo2-scroll ">                                                                                                       </td>                     <td class="col-class-scroll ">                         Herrar Motion                     </td>                     <td class="col-rankclass-scroll "><span>53</span></td>                     <td class="col-race-scroll ">45 km Motion</td>                     <td class="col-point-scroll ">Mål</td>                     <td class="col-lap-scroll ">1</td>                     <td class="col-timeofday-scroll ">15:50:22</td>                     <td class="col-time-scroll ">                                                                                                                                                                 <span class="field-time-scroll">4:40:22.7</span><span class="field-difftime-scroll">+1:52:55.6</span>                                                                                        </td>                     <td class="col-difftime-scroll ">                                                                                       +1:52:55.6                                                                           </td>                     <td class="col-splittime-scroll ">                                                                                       44:19.5                                                                           </td>                     <td class="col-additional-scroll "></td>                    </tr><tr data-gender="m" class="rank-52" data-id="14985274-1308933-1" data-contestantid="13026057">                     <td class="col-ranktotal-scroll  rank-66"><span>66</span></td>                     <td class="col-rankgender-scroll  rank-52"><span>52</span></td>                     <td class="col-rank-scroll "><span>52</span></td>                     <td class="col-bib-scroll ">                                                      643                                              </td>                     <td class="col-name-scroll ">                                                      <strong><span class="field-bib-scroll">643. </span> <span class="field-nation-scroll flag-icon flag-icon-se"></span> Kim <b>Ledin</b></strong>                              <div class="field-coinfo field-teammates-scroll">                                                               </div>                                                  <div class="field-club-scroll">Mockfjärd</div>                     </td>                     <td class="col-nation-scroll "><span class="flag-icon flag-icon-se"></span> SWE</td>                     <td class="col-club-scroll "><div class="col-wrapper">                                     Mockfjärd&nbsp;                                                                              <div class="field-coinfo field-teammates">                                                                                      </div>                                                                      </div></td>                     <td class="col-coinfo-scroll ">                                                                                  <div class="field-teammates">                                                                                      </div>                                                              </td>                     <td class="col-coinfo2-scroll ">                                                                                                       </td>                     <td class="col-class-scroll ">                         Herrar Motion                     </td>                     <td class="col-rankclass-scroll "><span>52</span></td>                     <td class="col-race-scroll ">45 km Motion</td>                     <td class="col-point-scroll ">Mål</td>                     <td class="col-lap-scroll ">1</td>                     <td class="col-timeofday-scroll ">15:46:54</td>                     <td class="col-time-scroll ">                                                                                                                                                                 <span class="field-time-scroll">4:36:55.0</span><span class="field-difftime-scroll">+1:49:27.9</span>                                                                                        </td>                     <td class="col-difftime-scroll ">                                                                                       +1:49:27.9                                                                           </td>                     <td class="col-splittime-scroll ">                                                                                       38:31.3                                                                           </td>                     <td class="col-additional-scroll "></td>                    </tr><tr data-gender="f" class="rank-19" data-id="14985250-1335459-1" data-contestantid="13026033">                     <td class="col-ranktotal-scroll  rank-80"><span>80</span></td>                     <td class="col-rankgender-scroll  rank-19"><span>19</span></td>                     <td class="col-rank-scroll "><span>19</span></td>                     <td class="col-bib-scroll ">                                                      618                                              </td>                     <td class="col-name-scroll ">                                                      <strong><span class="field-bib-scroll">618. </span> <span class="field-nation-scroll flag-icon flag-icon-se"></span> Nelly <b>Sandström</b></strong>                              <div class="field-coinfo field-teammates-scroll">                                                               </div>                                                  <div class="field-club-scroll">Nacka Värmdö Skidklubb</div>                     </td>                     <td class="col-nation-scroll "><span class="flag-icon flag-icon-se"></span> SWE</td>                     <td class="col-club-scroll "><div class="col-wrapper">                                     Nacka Värmdö Skidklubb&nbsp;                                                                              <div class="field-coinfo field-teammates">                                                                                      </div>                                                                      </div></td>                     <td class="col-coinfo-scroll ">                                                                                  <div class="field-teammates">                                                                                      </div>                                                              </td>                     <td class="col-coinfo2-scroll ">                                                                                                       </td>                     <td class="col-class-scroll ">                         Damer Motion                     </td>                     <td class="col-rankclass-scroll "><span>19</span></td>                     <td class="col-race-scroll ">45 km Motion</td>                     <td class="col-point-scroll ">38.4</td>                     <td class="col-lap-scroll ">1</td>                     <td class="col-timeofday-scroll ">15:45:05</td>                     <td class="col-time-scroll ">                                                                                                                                                                 <span class="field-time-scroll">4:35:06.0</span><span class="field-difftime-scroll">+1:57:07.1</span>                                                                                        </td>                     <td class="col-difftime-scroll ">                                                                                       +1:57:07.1                                                                           </td>                     <td class="col-splittime-scroll ">                                                                                       1:10:33.4                                                                           </td>                     <td class="col-additional-scroll "></td>                    </tr><tr data-gender="m" class="rank-61" data-id="14985292-1335459-1" data-contestantid="13026075">                     <td class="col-ranktotal-scroll  rank-79"><span>79</span></td>                     <td class="col-rankgender-scroll  rank-61"><span>61</span></td>                     <td class="col-rank-scroll "><span>61</span></td>                     <td class="col-bib-scroll ">                                                      663                                              </td>                     <td class="col-name-scroll ">                                                      <strong><span class="field-bib-scroll">663. </span> <span class="field-nation-scroll flag-icon flag-icon-se"></span> Kristofer <b>Grahn</b></strong>                              <div class="field-coinfo field-teammates-scroll">                                                               </div>                                                  <div class="field-club-scroll">AXA SC</div>                     </td>                     <td class="col-nation-scroll "><span class="flag-icon flag-icon-se"></span> SWE</td>                     <td class="col-club-scroll "><div class="col-wrapper">                                     AXA SC&nbsp;                                                                              <div class="field-coinfo field-teammates">                                                                                      </div>                                                                      </div></td>                     <td class="col-coinfo-scroll ">                                                                                  <div class="field-teammates">                                                                                      </div>                                                              </td>                     <td class="col-coinfo2-scroll ">                                                                                                       </td>                     <td class="col-class-scroll ">                         Herrar Motion                     </td>                     <td class="col-rankclass-scroll "><span>61</span></td>                     <td class="col-race-scroll ">45 km Motion</td>                     <td class="col-point-scroll ">38.4</td>                     <td class="col-lap-scroll ">1</td>                     <td class="col-timeofday-scroll ">15:44:08</td>                     <td class="col-time-scroll ">                                                                                                                                                                 <span class="field-time-scroll">4:34:08.2</span><span class="field-difftime-scroll">+2:19:21.2</span>                                                                                        </td>                     <td class="col-difftime-scroll ">                                                                                       +2:19:21.2                                                                           </td>                     <td class="col-splittime-scroll ">                                                                                       1:07:29.4                                                                           </td>                     <td class="col-additional-scroll "></td>                    </tr><tr data-gender="m" class="rank-51" data-id="14985241-1308933-1" data-contestantid="13026024">                     <td class="col-ranktotal-scroll  rank-65"><span>65</span></td>                     <td class="col-rankgender-scroll  rank-51"><span>51</span></td>                     <td class="col-rank-scroll "><span>51</span></td>                     <td class="col-bib-scroll ">                                                      609                                              </td>                     <td class="col-name-scroll ">                                                      <strong><span class="field-bib-scroll">609. </span> <span class="field-nation-scroll flag-icon flag-icon-se"></span> Anders <b>Dättermark</b></strong>                              <div class="field-coinfo field-teammates-scroll">                                                               </div>                                                  <div class="field-club-scroll">Granbergsdals IF</div>                     </td>                     <td class="col-nation-scroll "><span class="flag-icon flag-icon-se"></span> SWE</td>                     <td class="col-club-scroll "><div class="col-wrapper">                                     Granbergsdals IF&nbsp;                                                                              <div class="field-coinfo field-teammates">                                                                                      </div>                                                                      </div></td>                     <td class="col-coinfo-scroll ">                                                                                  <div class="field-teammates">                                                                                      </div>                                                              </td>                     <td class="col-coinfo2-scroll ">                                                                                                       </td>                     <td class="col-class-scroll ">                         Herrar Motion                     </td>                     <td class="col-rankclass-scroll "><span>51</span></td>                     <td class="col-race-scroll ">45 km Motion</td>                     <td class="col-point-scroll ">Mål</td>                     <td class="col-lap-scroll ">1</td>                     <td class="col-timeofday-scroll ">15:42:32</td>                     <td class="col-time-scroll ">                                                                                                                                                                 <span class="field-time-scroll">4:32:32.8</span><span class="field-difftime-scroll">+1:45:05.7</span>                                                                                        </td>                     <td class="col-difftime-scroll ">                                                                                       +1:45:05.7                                                                           </td>                     <td class="col-splittime-scroll ">                                                                                       44:40.8                                                                           </td>                     <td class="col-additional-scroll "></td>                    </tr><tr data-gender="f" class="rank-14" data-id="14985251-1308933-1" data-contestantid="13026034">                     <td class="col-ranktotal-scroll  rank-64"><span>64</span></td>                     <td class="col-rankgender-scroll  rank-14"><span>14</span></td>                     <td class="col-rank-scroll "><span>14</span></td>                     <td class="col-bib-scroll ">                                                      619                                              </td>                     <td class="col-name-scroll ">                                                      <strong><span class="field-bib-scroll">619. </span> <span class="field-nation-scroll flag-icon flag-icon-se"></span> Helen <b>Edlund</b></strong>                              <div class="field-coinfo field-teammates-scroll">                                                               </div>                                                  <div class="field-club-scroll"></div>                     </td>                     <td class="col-nation-scroll "><span class="flag-icon flag-icon-se"></span> SWE</td>                     <td class="col-club-scroll "><div class="col-wrapper">                                     &nbsp;                                                                              <div class="field-coinfo field-teammates">                                                                                      </div>                                                                      </div></td>                     <td class="col-coinfo-scroll ">                                                                                  <div class="field-teammates">                                                                                      </div>                                                              </td>                     <td class="col-coinfo2-scroll ">                                                                                                       </td>                     <td class="col-class-scroll ">                         Damer Motion                     </td>                     <td class="col-rankclass-scroll "><span>14</span></td>                     <td class="col-race-scroll ">45 km Motion</td>                     <td class="col-point-scroll ">Mål</td>                     <td class="col-lap-scroll ">1</td>                     <td class="col-timeofday-scroll ">15:41:39</td>                     <td class="col-time-scroll ">                                                                                                                                                                 <span class="field-time-scroll">4:31:40.0</span><span class="field-difftime-scroll">+1:24:45.2</span>                                                                                        </td>                     <td class="col-difftime-scroll ">                                                                                       +1:24:45.2                                                                           </td>                     <td class="col-splittime-scroll ">                                                                                       42:15.0                                                                           </td>                     <td class="col-additional-scroll "></td>                    </tr><tr data-gender="f" class="rank-18" data-id="14985277-1335459-1" data-contestantid="13026060">                     <td class="col-ranktotal-scroll  rank-78"><span>78</span></td>                     <td class="col-rankgender-scroll  rank-18"><span>18</span></td>                     <td class="col-rank-scroll "><span>18</span></td>                     <td class="col-bib-scroll ">                                                      648                                              </td>                     <td class="col-name-scroll ">                                                      <strong><span class="field-bib-scroll">648. </span> <span class="field-nation-scroll flag-icon flag-icon-se"></span> Johanna <b>Carlsson</b></strong>                              <div class="field-coinfo field-teammates-scroll">                                                               </div>                                                  <div class="field-club-scroll"></div>                     </td>                     <td class="col-nation-scroll "><span class="flag-icon flag-icon-se"></span> SWE</td>                     <td class="col-club-scroll "><div class="col-wrapper">                                     &nbsp;                                                                              <div class="field-coinfo field-teammates">                                                                                      </div>                                                                      </div></td>                     <td class="col-coinfo-scroll ">                                                                                  <div class="field-teammates">                                                                                      </div>                                                              </td>                     <td class="col-coinfo2-scroll ">                                                                                                       </td>                     <td class="col-class-scroll ">                         Damer Motion                     </td>                     <td class="col-rankclass-scroll "><span>18</span></td>                     <td class="col-race-scroll ">45 km Motion</td>                     <td class="col-point-scroll ">38.4</td>                     <td class="col-lap-scroll ">1</td>                     <td class="col-timeofday-scroll ">15:41:31</td>                     <td class="col-time-scroll ">                                                                                                                                                                 <span class="field-time-scroll">4:31:31.3</span><span class="field-difftime-scroll">+1:53:32.5</span>                                                                                        </td>                     <td class="col-difftime-scroll ">                                                                                       +1:53:32.5                                                                           </td>                     <td class="col-splittime-scroll ">                                                                                       1:04:02.6                                                                           </td>                     <td class="col-additional-scroll "></td>                    </tr><tr data-gender="m" class="rank-60" data-id="14985276-1335459-1" data-contestantid="13026059">                     <td class="col-ranktotal-scroll  rank-77"><span>77</span></td>                     <td class="col-rankgender-scroll  rank-60"><span>60</span></td>                     <td class="col-rank-scroll "><span>60</span></td>                     <td class="col-bib-scroll ">                                                      647                                              </td>                     <td class="col-name-scroll ">                                                      <strong><span class="field-bib-scroll">647. </span> <span class="field-nation-scroll flag-icon flag-icon-se"></span> Michael <b>Edquist</b></strong>                              <div class="field-coinfo field-teammates-scroll">                                                               </div>                                                  <div class="field-club-scroll"></div>                     </td>                     <td class="col-nation-scroll "><span class="flag-icon flag-icon-se"></span> SWE</td>                     <td class="col-club-scroll "><div class="col-wrapper">                                     &nbsp;                                                                              <div class="field-coinfo field-teammates">                                                                                      </div>                                                                      </div></td>                     <td class="col-coinfo-scroll ">                                                                                  <div class="field-teammates">                                                                                      </div>                                                              </td>                     <td class="col-coinfo2-scroll ">                                                                                                       </td>                     <td class="col-class-scroll ">                         Herrar Motion                     </td>                     <td class="col-rankclass-scroll "><span>60</span></td>                     <td class="col-race-scroll ">45 km Motion</td>                     <td class="col-point-scroll ">38.4</td>                     <td class="col-lap-scroll ">1</td>                     <td class="col-timeofday-scroll ">15:41:27</td>                     <td class="col-time-scroll ">                                                                                                                                                                 <span class="field-time-scroll">4:31:27.7</span><span class="field-difftime-scroll">+2:16:40.7</span>                                                                                        </td>                     <td class="col-difftime-scroll ">                                                                                       +2:16:40.7                                                                           </td>                     <td class="col-splittime-scroll ">                                                                                       1:04:05.8                                                                           </td>                     <td class="col-additional-scroll "></td>                    </tr><tr data-gender="m" class="rank-50" data-id="14985246-1308933-1" data-contestantid="13026029">                     <td class="col-ranktotal-scroll  rank-63"><span>63</span></td>                     <td class="col-rankgender-scroll  rank-50"><span>50</span></td>                     <td class="col-rank-scroll "><span>50</span></td>                     <td class="col-bib-scroll ">                                                      614                                              </td>                     <td class="col-name-scroll ">                                                      <strong><span class="field-bib-scroll">614. </span> <span class="field-nation-scroll flag-icon flag-icon-se"></span> Pablo <b>Romero</b></strong>                              <div class="field-coinfo field-teammates-scroll">                                                               </div>                                                  <div class="field-club-scroll"></div>                     </td>                     <td class="col-nation-scroll "><span class="flag-icon flag-icon-se"></span> SWE</td>                     <td class="col-club-scroll "><div class="col-wrapper">                                     &nbsp;                                                                              <div class="field-coinfo field-teammates">                                                                                      </div>                                                                      </div></td>                     <td class="col-coinfo-scroll ">                                                                                  <div class="field-teammates">                                                                                      </div>                                                              </td>                     <td class="col-coinfo2-scroll ">                                                                                                       </td>                     <td class="col-class-scroll ">                         Herrar Motion                     </td>                     <td class="col-rankclass-scroll "><span>50</span></td>                     <td class="col-race-scroll ">45 km Motion</td>                     <td class="col-point-scroll ">Mål</td>                     <td class="col-lap-scroll ">1</td>                     <td class="col-timeofday-scroll ">15:41:01</td>                     <td class="col-time-scroll ">                                                                                                                                                                 <span class="field-time-scroll">4:31:01.8</span><span class="field-difftime-scroll">+1:43:34.7</span>                                                                                        </td>                     <td class="col-difftime-scroll ">                                                                                       +1:43:34.7                                                                           </td>                     <td class="col-splittime-scroll ">                                                                                       44:31.4                                                                           </td>                     <td class="col-additional-scroll "></td>                    </tr><tr data-gender="m" class="rank-49" data-id="14985247-1308933-1" data-contestantid="13026030">                     <td class="col-ranktotal-scroll  rank-62"><span>62</span></td>                     <td class="col-rankgender-scroll  rank-49"><span>49</span></td>                     <td class="col-rank-scroll "><span>49</span></td>                     <td class="col-bib-scroll ">                                                      615                                              </td>                     <td class="col-name-scroll ">                                                      <strong><span class="field-bib-scroll">615. </span> <span class="field-nation-scroll flag-icon flag-icon-se"></span> Sebastian <b>Romero</b></strong>                              <div class="field-coinfo field-teammates-scroll">                                                               </div>                                                  <div class="field-club-scroll"></div>                     </td>                     <td class="col-nation-scroll "><span class="flag-icon flag-icon-se"></span> SWE</td>                     <td class="col-club-scroll "><div class="col-wrapper">                                     &nbsp;                                                                              <div class="field-coinfo field-teammates">                                                                                      </div>                                                                      </div></td>                     <td class="col-coinfo-scroll ">                                                                                  <div class="field-teammates">                                                                                      </div>                                                              </td>                     <td class="col-coinfo2-scroll ">                                                                                                       </td>                     <td class="col-class-scroll ">                         Herrar Motion                     </td>                     <td class="col-rankclass-scroll "><span>49</span></td>                     <td class="col-race-scroll ">45 km Motion</td>                     <td class="col-point-scroll ">Mål</td>                     <td class="col-lap-scroll ">1</td>                     <td class="col-timeofday-scroll ">15:40:57</td>                     <td class="col-time-scroll ">                                                                                                                                                                 <span class="field-time-scroll">4:30:57.2</span><span class="field-difftime-scroll">+1:43:30.1</span>                                                                                        </td>                     <td class="col-difftime-scroll ">                                                                                       +1:43:30.1                                                                           </td>                     <td class="col-splittime-scroll ">                                                                                       44:29.4                                                                           </td>                     <td class="col-additional-scroll "></td>                    </tr></tbody>
+                    </table>
+
+                </div>
+
+            </div>
+
+
+        </div>
+
+
+    </div>
+
+    <div class="" id="footer">
+        <div class="container left">
+            <p class="text-muted credit">
+                <span data-i18n="footer.presentedby">Presented by</span> <a class="logo" href="#"><img src="/content/gfx/eqwhite.png" class="footer-logo"></a>
+            </p>
+        </div>
+        <div class="container center">
+            <div class="social-likes social-likes_visible social-likes_ready">
+                <div class="social-likes__widget social-likes__widget_facebook" title="Share on Facebook" data-i18n="socialmedia.facebookshare"><span class="social-likes__button social-likes__button_facebook"><span class="social-likes__icon social-likes__icon_facebook"></span>Share</span><span class="social-likes__counter social-likes__counter_facebook social-likes__counter_empty"></span></div>
+                <div class="social-likes__widget social-likes__widget_twitter" title="Write a tweet" data-i18n="socialmedia.twittershare"><span class="social-likes__button social-likes__button_twitter"><span class="social-likes__icon social-likes__icon_twitter"></span>Tweet</span></div>
+            </div>
+
+        </div>
+
+        <div class="container right social-media-icons">
+            <p class="text-muted credit">
+                <span data-i18n="footer.visitus" class="text-visit">Visit us</span>
+                <span class="text-timestamp"></span>
+            </p>
+            <a href="https://www.facebook.com/pages/Quick-Timing-AS/146727602061213" target="_blank"><i class="fab fa-facebook fa-2x"></i></a>
+            <a href="https://twitter.com/EQTimingDev" target="_blank"><i class="fab fa-twitter fa-2x"></i></a>
+        </div>
+    </div>
+
+
+    <script src="/Content/lib/script?v=2OLHbTjCcmrc_WpKriz_zzqZ1bcht8txkErSiVfLdvo1"></script>
+
+
+    <script src="Content/js/dist/script.js"></script>
+
+
+
+
+
+
+    <script>if (!window.EQ.noTwitter) {
+            !function (d, s, id) { var js, fjs = d.getElementsByTagName(s)[0], p = /^http:/.test(d.location) ? 'http' : 'https'; if (!d.getElementById(id)) { js = d.createElement(s); js.id = id; js.src = p + '://platform.twitter.com/widgets.js'; fjs.parentNode.insertBefore(js, fjs); } }(document, 'script', 'twitter-wjs');
+        }</script>
+
+
+
+
+    <script language="javascript">if ((theme || []).length > 0) {
+            document.write('\x3Cscript type="text/javascript" src="' + app_path.theme + "/theme/custom/" + theme[1] + "/custom.js?v=" + new Date().valueOf() + '">\x3C/script>');
+        }
+
+        if (EQ.seriesId != null) {
+            document.write('\x3Clink rel="stylesheet" href="' + app_path.theme + "/theme/series/" + seriesId + "/layout.css?v=" + new Date().valueOf() + '">\x3C/link>');
+        }</script>
+
+
+
+
+
+    <iframe scrolling="no" frameborder="0" allowtransparency="true" src="https://platform.twitter.com/widgets/widget_iframe.2f70fb173b9000da126c79afe2098f02.html?origin=https%3A%2F%2Flive.eqtiming.com" title="Twitter settings iframe" style="display: none;"></iframe><iframe id="rufous-sandbox" scrolling="no" frameborder="0" allowtransparency="true" allowfullscreen="true" style="position: absolute; visibility: hidden; display: none; width: 0px; height: 0px; padding: 0px; border: none;" title="Twitter analytics iframe"></iframe>
+</body>
+</html>

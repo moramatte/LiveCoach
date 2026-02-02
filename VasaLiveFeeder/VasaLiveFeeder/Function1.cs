@@ -23,7 +23,7 @@ public class Function1
     }
 
     [Function("TempoDelta")]
-    public async Task<HttpResponseData> Run([HttpTrigger(AuthorizationLevel.Function, "get", "post")] HttpRequestData req)
+    public async Task<HttpResponseData> Run([HttpTrigger(AuthorizationLevel.Anonymous, "get", "post")] HttpRequestData req)
     {
         _logger.LogInformation("C# HTTP trigger function processed a request.");
 
@@ -139,7 +139,8 @@ public class Function1
         }
         catch (Exception e)
         {
-            return await CreateJsonResponse(req, $"Exception deriving: {e}", HttpStatusCode.BadRequest);
+            _logger.LogError(e, "Error deriving tempo delta for race {RaceName} at {Progress} km", raceName, progressInKm);
+            return await CreateJsonResponse(req, new { error = e.Message, details = e.ToString() }, HttpStatusCode.InternalServerError);
         }
 
         // return parsed data as JSON
@@ -151,13 +152,51 @@ public class Function1
     public async Task<double> DeriveDistanceDelta(string raceName, double myProgress)
     {
         var scraper = ServiceLocator.Resolve<ILiveScraper>();
-        var leaderData = await scraper.GetLeaderDataWithScraperAsync("https://live.eqtiming.com/73152#result:297321-0-1308925-1-1-");
-        
+
+        // debugUrl = "https://live.eqtiming.com/73153#result:297321-0-1308925-1-1-";
+        var url = GetRaceUrl(raceName);
+
+        _logger.LogInformation("Attempting to scrape race URL: {Url}", url);
+
+        // Log environment variables for debugging
+        var scraperServiceUrl = Environment.GetEnvironmentVariable("SCRAPER_SERVICE_URL");
+        var browserlessToken = Environment.GetEnvironmentVariable("BROWSERLESS_TOKEN");
+        var groqApiKey = Environment.GetEnvironmentVariable("GROQ_API_KEY");
+
+        _logger.LogInformation("Environment - SCRAPER_SERVICE_URL: {ScraperServiceUrl}", scraperServiceUrl ?? "(not set)");
+        _logger.LogInformation("Environment - BROWSERLESS_TOKEN: {HasToken}", !string.IsNullOrWhiteSpace(browserlessToken) ? "present" : "(not set)");
+        _logger.LogInformation("Environment - GROQ_API_KEY: {HasKey}", !string.IsNullOrWhiteSpace(groqApiKey) ? "present" : "(not set)");
+
+        // Validate configuration
+        var missingConfig = new List<string>();
+        if (string.IsNullOrWhiteSpace(scraperServiceUrl))
+            missingConfig.Add("SCRAPER_SERVICE_URL");
+        if (string.IsNullOrWhiteSpace(groqApiKey))
+            missingConfig.Add("GROQ_API_KEY");
+
+        if (missingConfig.Any())
+        {
+            var errorMsg = $"Missing required configuration: {string.Join(", ", missingConfig)}. " +
+                          "Configure these in Azure Function App Settings or local.settings.json. " +
+                          "See PlaywrightScraper/DEPLOYMENT.md for setup instructions.";
+            _logger.LogError(errorMsg);
+            throw new InvalidOperationException(errorMsg);
+        }
+
+        var leaderData = await scraper.GetLeaderDataWithScraperAsync(url);
+
         if (leaderData == null)
         {
-            throw new InvalidOperationException("Could not extract leader distance from race page.");
+            var errorMsg = $"Could not extract leader distance from race page. URL: {url}. " +
+                          $"Scraper service ({scraperServiceUrl}) may be unreachable or returned invalid data. " +
+                          "Check Azure Function logs and verify scraper service is running. " +
+                          $"Test scraper health: {scraperServiceUrl}/health";
+            _logger.LogError(errorMsg);
+            throw new InvalidOperationException(errorMsg);
         }
-        
+
+        _logger.LogInformation("Successfully scraped leader data: {Distance} km, Time: {Time}", leaderData.DistanceKm, leaderData.ElapsedTime);
+
         var leaderKm = leaderData.DistanceKm;
         var ourPlus50Percent = myProgress * 1.5;
         var delta = leaderKm - ourPlus50Percent;
@@ -212,12 +251,36 @@ public class Function1
             "vasaloppet 30" => 30,
             "vasaloppet 10" => 10.0,
             "halvvasan" => 45,
+            "ladiagonela" => 47.0,
             "craft" => 42.0,
             "craft ski marathon" => 42.0,
             "sya" => 40.0,
             "k-byggslingan" => 40.0,
             _ => 40.0
         };
+    }
+
+    private string GetRaceUrl(string raceName)
+    {
+        var raceBaseUrl =  raceName.ToLower() switch
+        {
+            "vasaloppet" => "https://live.eqtiming.com/76514",
+            "vasaloppet 90" => "https://live.eqtiming.com/76514",
+            "moraloppet" => "https://live.eqtiming.com/76514",
+            "mora" => "https://live.eqtiming.com/76514",
+            "mora25" => "https://live.eqtiming.com/73153",
+            "craft" => "https://live.eqtiming.com/73152",
+            "craft ski marathon" => "https://live.eqtiming.com/73152",
+            "ladiagonela" => "https://skiclassics.com/live-center/?event=9620&season=2026&gender=men",
+            _ => throw new Exception($"No race url defined for {raceName}")
+        };
+
+        if (raceBaseUrl.Contains("eqtiming"))
+        {
+            return $"{raceBaseUrl}#result";
+        }
+
+        return  raceBaseUrl;
     }
 
     private static async Task<HttpResponseData> CreateJsonResponse(HttpRequestData req, object value, HttpStatusCode status)

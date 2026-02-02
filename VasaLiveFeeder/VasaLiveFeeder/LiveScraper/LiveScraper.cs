@@ -99,53 +99,81 @@ public class LiveScraper : ILiveScraper
             Console.WriteLine($"[Cache HIT] Returning cached data for {url}");
             return cachedData;
         }
-        
+
         try
         {
             var browserlessToken = Environment.GetEnvironmentVariable("BROWSERLESS_TOKEN");
+            var groqApiKey = Environment.GetEnvironmentVariable("GROQ_API_KEY");
+
+            Console.WriteLine($"[GetLeaderDataWithScraperAsync] BROWSERLESS_TOKEN present: {!string.IsNullOrWhiteSpace(browserlessToken)}");
+            Console.WriteLine($"[GetLeaderDataWithScraperAsync] GROQ_API_KEY present: {!string.IsNullOrWhiteSpace(groqApiKey)}");
+
             if (!string.IsNullOrWhiteSpace(browserlessToken))
             {
                 try
                 {
+                    Console.WriteLine($"[Browserless] Attempting to fetch {url}");
                     var htmlContent = await GetRenderedHtmlViaBrowserlessAsync(url, browserlessToken, timeoutMs).ConfigureAwait(false);
                     if (!string.IsNullOrWhiteSpace(htmlContent))
                     {
-                        Console.WriteLine($"[Browserless] Successfully rendered HTML for {url}");
+                        Console.WriteLine($"[Browserless] Successfully rendered HTML for {url} ({htmlContent.Length} chars)");
                         var browserlessResult = await AnalyzeWithAgentAsync(htmlContent).ConfigureAwait(false);
                         if (browserlessResult != null)
                         {
+                            Console.WriteLine($"[Browserless] AI extraction succeeded: {browserlessResult.DistanceKm} km");
                             AddToCache(url, browserlessResult);
                         }
+                        else
+                        {
+                            Console.WriteLine($"[Browserless] AI extraction returned null");
+                        }
                         return browserlessResult;
+                    }
+                    else
+                    {
+                        Console.WriteLine($"[Browserless] Returned empty HTML content");
                     }
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[Browserless error]: {ex.Message}. Falling back to Playwright...");
+                    Console.WriteLine($"[Browserless error]: {ex.Message}. Stack: {ex.StackTrace}. Falling back to Playwright...");
                 }
             }
-
-            await EnsurePlaywrightBrowsersInstalledAsync().ConfigureAwait(false);
-            using var playwright = await Playwright.CreateAsync().ConfigureAwait(false);
-            await using var browser = await playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions { Headless = true }).ConfigureAwait(false);
-            var page = await browser.NewPageAsync().ConfigureAwait(false);
-            page.SetDefaultTimeout(timeoutMs);
-
-            await page.GotoAsync(url, new PageGotoOptions { WaitUntil = WaitUntilState.NetworkIdle }).ConfigureAwait(false);
-            var pageContent = await page.ContentAsync().ConfigureAwait(false);
-
-            var playwrightResult = await AnalyzeWithAgentAsync(pageContent).ConfigureAwait(false);
-            if (playwrightResult != null)
+            else
             {
-                AddToCache(url, playwrightResult);
+                Console.WriteLine($"[GetLeaderDataWithScraperAsync] BROWSERLESS_TOKEN not set, skipping Browserless");
             }
-            return playwrightResult;
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"[GetLeaderDataWithScraperAsync error]: {ex.Message}");
-            return null;
-        }
+
+                Console.WriteLine($"[Playwright] Attempting fallback for {url}");
+                await EnsurePlaywrightBrowsersInstalledAsync().ConfigureAwait(false);
+                using var playwright = await Playwright.CreateAsync().ConfigureAwait(false);
+                await using var browser = await playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions { Headless = true }).ConfigureAwait(false);
+                var page = await browser.NewPageAsync().ConfigureAwait(false);
+                page.SetDefaultTimeout(timeoutMs);
+
+                await page.GotoAsync(url, new PageGotoOptions { WaitUntil = WaitUntilState.NetworkIdle }).ConfigureAwait(false);
+                var pageContent = await page.ContentAsync().ConfigureAwait(false);
+
+                Console.WriteLine($"[Playwright] Successfully fetched HTML ({pageContent.Length} chars)");
+
+                var playwrightResult = await AnalyzeWithAgentAsync(pageContent).ConfigureAwait(false);
+                if (playwrightResult != null)
+                {
+                    Console.WriteLine($"[Playwright] AI extraction succeeded: {playwrightResult.DistanceKm} km");
+                    AddToCache(url, playwrightResult);
+                }
+                else
+                {
+                    Console.WriteLine($"[Playwright] AI extraction returned null");
+                }
+                return playwrightResult;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[GetLeaderDataWithScraperAsync error]: {ex.Message}");
+                Console.WriteLine($"[GetLeaderDataWithScraperAsync stack]: {ex.StackTrace}");
+                return null;
+            }
     }
 
     public async Task<LeaderData?> AnalyzeWithAgentAsync(string content)
@@ -210,7 +238,17 @@ public class LiveScraper : ILiveScraper
             var aiResult = jsonResponse.GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString();
             Console.WriteLine($"[AI Response]: {aiResult}");
 
-            return ParseAIResponse(aiResult);
+            // DIAGNOSTIC: Log the extracted data sent to AI
+            Console.WriteLine($"[DIAGNOSTIC] Extracted data sent to Groq ({extractedData.Length} chars):");
+            Console.WriteLine(extractedData.Length > 1000 ? extractedData.Substring(0, 1000) + "..." : extractedData);
+
+            var parsed = ParseAIResponse(aiResult);
+            if (parsed == null)
+            {
+                Console.WriteLine($"[DIAGNOSTIC] ParseAIResponse returned NULL for AI result: '{aiResult}'");
+            }
+
+            return parsed;
         }
         catch (Exception ex)
         {
@@ -417,20 +455,28 @@ public class LiveScraper : ILiveScraper
     {
         try
         {
-            // Use /content endpoint with gotoOptions.waitUntil to ensure JavaScript executes
+            // Check if we have a custom scraper service URL (our Playwright container)
+            var scraperServiceUrl = Environment.GetEnvironmentVariable("SCRAPER_SERVICE_URL");
+
+            if (!string.IsNullOrWhiteSpace(scraperServiceUrl))
+            {
+                // Use our own Playwright scraper service
+                return await GetRenderedHtmlViaScraperServiceAsync(url, scraperServiceUrl, timeoutMs).ConfigureAwait(false);
+            }
+
+            // Fall back to Browserless (if token is provided)
             var requestBody = new
             {
                 url,
                 gotoOptions = new
                 {
-                    waitUntil = "networkidle2" // Wait for network to be idle (max 2 connections)
+                    waitUntil = "networkidle2"
                 }
             };
 
             var json = JsonSerializer.Serialize(requestBody);
-            Console.WriteLine($"[Browserless] Calling /content API for {url} with networkidle2 wait");
-            
-            // Token goes in URL query parameter
+            Console.WriteLine($"[Browserless] Calling /content API for {url}");
+
             using var request = new HttpRequestMessage(HttpMethod.Post, $"https://chrome.browserless.io/content?token={apiToken}")
             {
                 Content = new StringContent(json, Encoding.UTF8, "application/json")
@@ -438,15 +484,14 @@ public class LiveScraper : ILiveScraper
 
             using var response = await _httpClient.SendAsync(request).ConfigureAwait(false);
             var responseBody = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-            
+
             Console.WriteLine($"[Browserless] Response status: {response.StatusCode}");
-            
+
             if (!response.IsSuccessStatusCode)
             {
                 var errorPreview = responseBody.Length > 200 ? responseBody.Substring(0, 200) + "..." : responseBody;
                 Console.WriteLine($"[Browserless] Error response: {errorPreview}");
-                
-                // Check for common issues
+
                 if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
                 {
                     throw new Exception($"Browserless authentication failed - check BROWSERLESS_TOKEN");
@@ -460,28 +505,106 @@ public class LiveScraper : ILiveScraper
                 {
                     throw new Exception($"Browserless service error (likely temporary outage) - status {response.StatusCode}");
                 }
-                
+
                 throw new Exception($"Browserless API failed with status {response.StatusCode}: {errorPreview}");
             }
-            
+
             Console.WriteLine($"[Browserless] Success - received {responseBody.Length} chars");
-            
-            // Debug: Check if table exists
-            var tablePos = responseBody.IndexOf("<table", StringComparison.OrdinalIgnoreCase);
-            if (tablePos > 0)
-            {
-                Console.WriteLine($"[Browserless] ? Table found at position {tablePos}");
-            }
-            else
-            {
-                Console.WriteLine($"[Browserless] ? No <table> tag found - JavaScript may not have executed");
-            }
-            
             return responseBody;
         }
         catch (Exception ex)
         {
             Console.WriteLine($"[Browserless] Exception: {ex.Message}");
+            throw;
+        }
+    }
+
+    private async Task<string> GetRenderedHtmlViaScraperServiceAsync(string url, string scraperServiceUrl, int timeoutMs)
+    {
+        try
+        {
+            var requestBody = new
+            {
+                url,
+                waitUntil = "networkidle"
+            };
+
+            var json = JsonSerializer.Serialize(requestBody);
+            var serviceEndpoint = $"{scraperServiceUrl.TrimEnd('/')}/render";
+            Console.WriteLine($"[ScraperService] Calling {serviceEndpoint} for {url}");
+
+            // First, test if the service is reachable with a health check
+            try
+            {
+                var healthEndpoint = $"{scraperServiceUrl.TrimEnd('/')}/health";
+                Console.WriteLine($"[ScraperService] Testing health endpoint: {healthEndpoint}");
+                using var healthRequest = new HttpRequestMessage(HttpMethod.Get, healthEndpoint);
+                using var healthResponse = await _httpClient.SendAsync(healthRequest, HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false);
+                if (!healthResponse.IsSuccessStatusCode)
+                {
+                    Console.WriteLine($"[ScraperService] WARNING: Health check failed with status {healthResponse.StatusCode}");
+                }
+                else
+                {
+                    Console.WriteLine($"[ScraperService] Health check passed");
+                }
+            }
+            catch (HttpRequestException healthEx)
+            {
+                Console.WriteLine($"[ScraperService] ERROR: Cannot reach scraper service at {scraperServiceUrl}");
+                Console.WriteLine($"[ScraperService] Health check error: {healthEx.Message}");
+                throw new Exception($"Scraper service is not reachable at {scraperServiceUrl}. Ensure the service is running. Error: {healthEx.Message}");
+            }
+
+            using var request = new HttpRequestMessage(HttpMethod.Post, serviceEndpoint)
+            {
+                Content = new StringContent(json, Encoding.UTF8, "application/json")
+            };
+
+            request.Headers.Add("User-Agent", "VasaLiveFeeder/1.0");
+
+            using var response = await _httpClient.SendAsync(request).ConfigureAwait(false);
+            var responseBody = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+
+            Console.WriteLine($"[ScraperService] Response status: {response.StatusCode}");
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var errorPreview = responseBody.Length > 200 ? responseBody.Substring(0, 200) + "..." : responseBody;
+                Console.WriteLine($"[ScraperService] Error response: {errorPreview}");
+                throw new Exception($"Scraper service failed with status {response.StatusCode}: {errorPreview}");
+            }
+
+            // Parse JSON response
+            var jsonResponse = JsonSerializer.Deserialize<JsonElement>(responseBody);
+
+            if (!jsonResponse.TryGetProperty("success", out var successProp) || !successProp.GetBoolean())
+            {
+                var error = jsonResponse.TryGetProperty("error", out var errorProp) 
+                    ? errorProp.GetString() 
+                    : "Unknown error";
+                throw new Exception($"Scraper service returned error: {error}");
+            }
+
+            var html = jsonResponse.GetProperty("html").GetString();
+            var duration = jsonResponse.TryGetProperty("duration", out var durationProp) 
+                ? durationProp.GetInt32() 
+                : 0;
+
+            Console.WriteLine($"[ScraperService] Success - received {html?.Length ?? 0} chars in {duration}ms");
+
+            return html ?? string.Empty;
+        }
+        catch (HttpRequestException httpEx)
+        {
+            Console.WriteLine($"[ScraperService] HTTP Exception: {httpEx.Message}");
+            Console.WriteLine($"[ScraperService] Stack trace: {httpEx.StackTrace}");
+            throw new Exception($"Failed to connect to scraper service at {scraperServiceUrl}: {httpEx.Message}. Ensure the service is running and accessible.", httpEx);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[ScraperService] Exception: {ex.Message}");
+            Console.WriteLine($"[ScraperService] Stack trace: {ex.StackTrace}");
             throw;
         }
     }

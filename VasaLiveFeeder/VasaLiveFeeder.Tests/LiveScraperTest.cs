@@ -60,6 +60,17 @@ namespace VasaLiveFeeder.Tests
         }
 
         [TestMethod]
+        public async Task LiveDataIsScrapedFromSkiClassicsLaDiagonela()
+        {
+            var scraper = new LiveScraper.LiveScraper();
+            var data = await scraper.GetLeaderDataAsync("https://skiclassics.com/live-center/?event=9620&season=2026&gender=men");
+
+            Assert.IsNotNull(data);
+            Assert.AreEqual(30, data.DistanceKm);
+            Assert.AreEqual(new TimeSpan(1, 28, 48), data.ElapsedTime);
+        }
+
+        [TestMethod]
         public async Task LiveDataIsScrapedFromSkiClassics()
         {
             var scraper = new LiveScraper.LiveScraper();

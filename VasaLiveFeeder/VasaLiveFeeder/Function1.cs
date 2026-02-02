@@ -238,7 +238,7 @@ public class Function1
 
         _logger.LogInformation($"Old speed: {meanSpeed}. New speed: {requiredSpeed}. Estimated total time: {myTime}");
 
-        return double.Round(requiredSpeed.KilometersPerHour, 2);
+        return double.Round(requiredSpeed.MinutesPerKilometer, 2);
     }
 
     private double GetTotalDistance(string raceName)

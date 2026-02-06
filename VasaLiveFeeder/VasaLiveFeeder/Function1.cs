@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using Infrastructure;
 using Infrastructure.Extensions;
+using Infrastructure.Logger;
 using Infrastructure.Speed;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
@@ -30,6 +31,7 @@ public class Function1
         // Try to get raceName/progressInKm from query string first (manual parse)
         string raceName = null;
         string progressStr = null;
+        string elapsedTimeStr = null;
         string currentSpeedStr = null;
         bool dryRun = false;
         var rawQuery = req.Url.Query; // starts with '?' when present
@@ -46,6 +48,7 @@ public class Function1
                     var val = Uri.UnescapeDataString(kv[1]);
                     if (key == "racename" || key == "race") raceName = val;
                     if (key == "progressinkm" || key == "progress" || key == "km") progressStr = val;
+                    if (key == "elapsedtime" || key == "elapsed" || key == "time") elapsedTimeStr = val;
                     if (key == "currentspeed" || key == "speed") currentSpeedStr = val;
                     if (key == "dryrun") dryRun = val.Equals("true", StringComparison.OrdinalIgnoreCase) || val == "1";
                 }
@@ -59,7 +62,7 @@ public class Function1
         // If not provided in query, read the request body
         try
         {
-            if (string.IsNullOrWhiteSpace(raceName) || string.IsNullOrWhiteSpace(progressStr) || string.IsNullOrWhiteSpace(currentSpeedStr))
+            if (string.IsNullOrWhiteSpace(raceName) || string.IsNullOrWhiteSpace(progressStr))
             {
                 using var reader = new StreamReader(req.Body, Encoding.UTF8);
                 var body = await reader.ReadToEndAsync();
@@ -77,6 +80,9 @@ public class Function1
                             if (root.TryGetProperty("progressInKm", out var jProg)) progressStr ??= jProg.GetRawText().Trim('"');
                             if (root.TryGetProperty("progress", out var jProg2)) progressStr ??= jProg2.GetRawText().Trim('"');
                             if (root.TryGetProperty("km", out var jProg3)) progressStr ??= jProg3.GetRawText().Trim('"');
+                            if (root.TryGetProperty("elapsedTime", out var jTime)) elapsedTimeStr ??= jTime.GetRawText().Trim('"');
+                            if (root.TryGetProperty("elapsed", out var jTime2)) elapsedTimeStr ??= jTime2.GetRawText().Trim('"');
+                            if (root.TryGetProperty("time", out var jTime3)) elapsedTimeStr ??= jTime3.GetRawText().Trim('"');
                             if (root.TryGetProperty("currentSpeed", out var jSpeed)) currentSpeedStr ??= jSpeed.GetRawText().Trim('"');
                             if (root.TryGetProperty("speed", out var jSpeed2)) currentSpeedStr ??= jSpeed2.GetRawText().Trim('"');
                             if (root.TryGetProperty("dryRun", out var jDry)) dryRun = jDry.GetBoolean();
@@ -86,11 +92,18 @@ public class Function1
                     else if (body.Contains(","))
                     {
                         var parts = body.Split(',', StringSplitOptions.RemoveEmptyEntries);
-                        if (parts.Length >= 3)
+                        if (parts.Length >= 4)
                         {
                             raceName ??= parts[0].Trim();
                             progressStr ??= parts[1].Trim();
-                            currentSpeedStr ??= parts[2].Trim();
+                            elapsedTimeStr ??= parts[2].Trim();
+                            currentSpeedStr ??= parts[3].Trim();
+                        }
+                        else if (parts.Length >= 3)
+                        {
+                            raceName ??= parts[0].Trim();
+                            progressStr ??= parts[1].Trim();
+                            elapsedTimeStr ??= parts[2].Trim();
                         }
                         else if (parts.Length >= 2)
                         {
@@ -101,11 +114,18 @@ public class Function1
                     else
                     {
                         var parts = body.Split((char[])null, StringSplitOptions.RemoveEmptyEntries);
-                        if (parts.Length >= 3)
+                        if (parts.Length >= 4)
                         {
                             raceName ??= parts[0].Trim();
                             progressStr ??= parts[1].Trim();
-                            currentSpeedStr ??= parts[2].Trim();
+                            elapsedTimeStr ??= parts[2].Trim();
+                            currentSpeedStr ??= parts[3].Trim();
+                        }
+                        else if (parts.Length >= 3)
+                        {
+                            raceName ??= parts[0].Trim();
+                            progressStr ??= parts[1].Trim();
+                            elapsedTimeStr ??= parts[2].Trim();
                         }
                         else if (parts.Length >= 2)
                         {
@@ -136,9 +156,12 @@ public class Function1
         }
 
         double newSpeed;
+        double leaderDistanceKm;
         try
         {
-             newSpeed = await DeriveTempoDelta(raceName, progressStr, currentSpeedStr, dryRun);
+            var (pace, leaderDistance) = await DeriveTempoDelta(raceName, progressStr, elapsedTimeStr, currentSpeedStr, dryRun);
+            newSpeed = pace; // pace in min/km
+            leaderDistanceKm = leaderDistance;
         }
         catch (Exception e)
         {
@@ -147,59 +170,48 @@ public class Function1
         }
 
         // return parsed data as JSON
-        var result = new { newSpeed = newSpeed };
+        if (double.IsInfinity(newSpeed) || double.IsNaN(newSpeed))
+        {
+            Log.Error(GetType(), "Derived new speed is infinity or NaN");
+            newSpeed = 0.1;
+        }
+        var result = new { newSpeed = newSpeed, leaderDistanceKm = leaderDistanceKm };
 
         return await CreateJsonResponse(req, result, HttpStatusCode.OK);
     }
 
-    public async Task<double> DeriveDistanceDelta(string raceName, double myProgress, bool dryRun = false)
+    public async Task<(double leaderDistanceKm, TimeSpan? leaderElapsedTime)> GetLeaderDataAsync(string raceName, bool dryRun = false)
     {
         if (dryRun)
         {
-            // Dry run mode: Simulate a race starting at the top of each hour
-            // Leader pace: 4.7619 m/s (17.143 km/h or 3.5 min/km)
-            const double leaderPaceMetersPerSecond = 4.7619;
+            // Dry run mode: Simulate a race starting every 30 minutes (resets at :00 and :30)
+            // Leader pace: 3:00 min/km (3 minutes per km) = 20 km/h
+            const double leaderPaceMinPerKm = 3.0;
 
             var now = DateTime.UtcNow;
-            var minutesSinceHour = now.Minute + (now.Second / 60.0);
-            var raceTimeMinutes = minutesSinceHour;
-            var leaderDistanceKm = (leaderPaceMetersPerSecond * raceTimeMinutes * 60) / 1000.0;
+            var minutesSinceLast30 = now.Minute % 30 + (now.Second / 60.0);
+            var raceTimeMinutes = minutesSinceLast30;
+            var leaderDistanceKm = raceTimeMinutes / leaderPaceMinPerKm;
+            var leaderElapsedTime = TimeSpan.FromMinutes(raceTimeMinutes);
 
-            _logger.LogInformation("DRY RUN: Current time {Time}, minutes since hour: {Minutes}, leader at {Distance} km", 
+            _logger.LogInformation("DRY RUN: Current time {Time}, minutes since last 30-min mark: {Minutes}, leader at {Distance} km (pace: 3:00 min/km)", 
                 now.ToString("HH:mm:ss"), raceTimeMinutes, leaderDistanceKm);
 
-            var progressPlusFiftyPercent = myProgress * 1.5;
-            var distanceDelta = leaderDistanceKm - progressPlusFiftyPercent;
-
-            if (distanceDelta < 0)
-            {
-                if (dryRun)
-                {
-                    return 0;
-                }
-                throw  new InvalidOperationException($"Distance delta cannot be negative. Leader: {leaderDistanceKm:F2} km, My progress + 50%: {progressPlusFiftyPercent:F2} km");
-            }
-
-            return distanceDelta;
+            return (leaderDistanceKm, leaderElapsedTime);
         }
 
         var scraper = ServiceLocator.Resolve<ILiveScraper>();
-
-        // debugUrl = "https://live.eqtiming.com/73153#result:297321-0-1308925-1-1-";
         var url = GetRaceUrl(raceName);
 
         _logger.LogInformation("Attempting to scrape race URL: {Url}", url);
 
-        // Log environment variables for debugging
+        // Log and validate configuration
         var scraperServiceUrl = Environment.GetEnvironmentVariable("SCRAPER_SERVICE_URL");
-        var browserlessToken = Environment.GetEnvironmentVariable("BROWSERLESS_TOKEN");
         var groqApiKey = Environment.GetEnvironmentVariable("GROQ_API_KEY");
 
         _logger.LogInformation("Environment - SCRAPER_SERVICE_URL: {ScraperServiceUrl}", scraperServiceUrl ?? "(not set)");
-        _logger.LogInformation("Environment - BROWSERLESS_TOKEN: {HasToken}", !string.IsNullOrWhiteSpace(browserlessToken) ? "present" : "(not set)");
         _logger.LogInformation("Environment - GROQ_API_KEY: {HasKey}", !string.IsNullOrWhiteSpace(groqApiKey) ? "present" : "(not set)");
 
-        // Validate configuration
         var missingConfig = new List<string>();
         if (string.IsNullOrWhiteSpace(scraperServiceUrl))
             missingConfig.Add("SCRAPER_SERVICE_URL");
@@ -209,8 +221,7 @@ public class Function1
         if (missingConfig.Any())
         {
             var errorMsg = $"Missing required configuration: {string.Join(", ", missingConfig)}. " +
-                          "Configure these in Azure Function App Settings or local.settings.json. " +
-                          "See PlaywrightScraper/DEPLOYMENT.md for setup instructions.";
+                          "Configure these in Azure Function App Settings or local.settings.json.";
             _logger.LogError(errorMsg);
             throw new InvalidOperationException(errorMsg);
         }
@@ -219,81 +230,128 @@ public class Function1
 
         if (leaderData == null)
         {
-            // More specific error message based on configuration
-            var configErrors = new List<string>();
-
-            if (string.IsNullOrWhiteSpace(scraperServiceUrl))
-                configErrors.Add("SCRAPER_SERVICE_URL not configured");
-
-            if (string.IsNullOrWhiteSpace(groqApiKey))
-                configErrors.Add("GROQ_API_KEY not configured");
-
-            string errorMsg;
-            if (configErrors.Any())
-            {
-                errorMsg = $"Configuration error: {string.Join(", ", configErrors)}. " +
-                          "Set these in Azure Function App Settings.";
-            }
-            else
-            {
-                errorMsg = $"Failed to extract leader data from race page: {url}. " +
+            var errorMsg = $"Failed to extract leader data from race page: {url}. " +
                           "Possible reasons:\n" +
-                          $"1. Scraper service ({scraperServiceUrl}) may be unreachable - test: {scraperServiceUrl}/health\n" +
-                          "2. The race may not have started yet (no leader data available)\n" +
+                          $"1. Scraper service ({scraperServiceUrl}) may be unreachable\n" +
+                          "2. The race may not have started yet\n" +
                           "3. The race page format may have changed\n" +
-                          "4. AI extraction failed - check GROQ_API_KEY validity and credits\n" +
-                          "5. Network connectivity issues\n" +
-                          "Check Azure Function logs (Application Insights) for detailed error messages.";
-            }
-
+                          "4. AI extraction failed\n" +
+                          "Check Azure Function logs for details.";
             _logger.LogError(errorMsg);
             throw new InvalidOperationException(errorMsg);
         }
 
-        _logger.LogInformation("Successfully scraped leader data: {Distance} km, Time: {Time}", leaderData.DistanceKm, leaderData.ElapsedTime);
+        _logger.LogInformation("Successfully scraped leader data: {Distance} km, Time: {Time}", 
+            leaderData.DistanceKm, leaderData.ElapsedTime);
 
-        var leaderKm = leaderData.DistanceKm;
-        var ourPlus50Percent = myProgress * 1.5;
-        var delta = leaderKm - ourPlus50Percent;
-
-        return delta;
+        return (leaderData.DistanceKm, leaderData.ElapsedTime);
     }
 
-    public async Task<double> DeriveTempoDelta(string raceName, string myProgressStr, string meanSpeedStr, bool dryRun = false)
+    public async Task<(double requiredPaceMinPerKm, double leaderDistanceKm)> DeriveTempoDelta(string raceName, string myProgressStr, string elapsedTimeStr, string currentSpeedStr = null, bool dryRun = false)
     {
-        var meanSpeed = Speed.FromKilometersPerHour(double.Parse(meanSpeedStr, CultureInfo.InvariantCulture));
-
         var myProgress = double.Parse(myProgressStr, CultureInfo.InvariantCulture);
         var totalDistance = GetTotalDistance(raceName);
 
-        var behindInKm = await DeriveDistanceDelta(raceName, myProgress, dryRun);
+        // Get leader's current data
+        var (leaderDistanceKm, leaderElapsedTime) = await GetLeaderDataAsync(raceName, dryRun);
 
-        var kmToGo = totalDistance - myProgress;
-        var catchUpPerKm = behindInKm / kmToGo;
-        var catchUpPerKmInMeters = catchUpPerKm * 1000.0;
+        // Calculate target finishing time (leader's time + 50%)
+        TimeSpan targetFinishTime;
 
-        // Calculate required speed adjustment using simple ratio
-        // If catchUpPerKmInMeters is positive: we're behind, need to speed up (cover MORE distance per km)
-        //   - Speed ratio = (1000 + catchUpPerKmInMeters) / 1000 > 1.0
-        //   - Required speed = current speed * ratio (faster)
-        // If catchUpPerKmInMeters is negative: we're ahead, can slow down (cover LESS distance per km)
-        //   - Speed ratio = (1000 + catchUpPerKmInMeters) / 1000 < 1.0
-        //   - Required speed = current speed * ratio (slower)
-        
-        var speedRatio = (1000.0 + catchUpPerKmInMeters) / 1000.0;
-        
-        var currentSpeed = meanSpeed;
-        var requiredSpeed = meanSpeed * speedRatio;
-       
-        // Time remaining at new pace
-        var timeToGoSeconds = kmToGo * requiredSpeed.MinutesPerKilometer * 60.0;
-        var tsToGo = TimeSpan.FromSeconds(timeToGoSeconds);
-        
-        var myTime = $"{tsToGo:hh\\:mm\\:ss}";
+        if (leaderDistanceKm >= totalDistance)
+        {
+            // Leader has finished - we have exact target time
+            if (leaderElapsedTime.HasValue)
+            {
+                targetFinishTime = TimeSpan.FromSeconds(leaderElapsedTime.Value.TotalSeconds * 1.5);
+                _logger.LogInformation("Leader finished in {LeaderTime}. Target time: {TargetTime}", 
+                    leaderElapsedTime.Value.ToString(@"hh\:mm\:ss"), 
+                    targetFinishTime.ToString(@"hh\:mm\:ss"));
+            }
+            else
+            {
+                // No time data, estimate based on 3:00 min/km pace
+                targetFinishTime = TimeSpan.FromMinutes(totalDistance * 3.0 * 1.5);
+                _logger.LogWarning("Leader finished but no time available, using estimated target: {TargetTime}", 
+                    targetFinishTime.ToString(@"hh\:mm\:ss"));
+            }
+        }
+        else
+        {
+            // Leader still racing - extrapolate their finishing time
+            if (leaderElapsedTime.HasValue && leaderDistanceKm > 0)
+            {
+                var leaderMeanPaceMinPerKm = leaderElapsedTime.Value.TotalMinutes / leaderDistanceKm;
+                var leaderEstimatedFinishTime = TimeSpan.FromMinutes(totalDistance * leaderMeanPaceMinPerKm);
+                targetFinishTime = TimeSpan.FromSeconds(leaderEstimatedFinishTime.TotalSeconds * 1.5);
 
-        _logger.LogInformation($"Old speed: {meanSpeed}. New speed: {requiredSpeed}. Estimated total time: {myTime}");
+                _logger.LogInformation("Leader at {LeaderDist} km in {LeaderTime} (pace: {LeaderPace:F2} min/km). Estimated finish: {EstFinish}. Target time: {TargetTime}",
+                    leaderDistanceKm,
+                    leaderElapsedTime.Value.ToString(@"hh\:mm\:ss"),
+                    leaderMeanPaceMinPerKm,
+                    leaderEstimatedFinishTime.ToString(@"hh\:mm\:ss"),
+                    targetFinishTime.ToString(@"hh\:mm\:ss"));
+            }
+            else
+            {
+                // No time data, estimate
+                targetFinishTime = TimeSpan.FromMinutes(totalDistance * 3.0 * 1.5);
+                _logger.LogWarning("No leader time data, using estimated target: {TargetTime}", 
+                    targetFinishTime.ToString(@"hh\:mm\:ss"));
+            }
+        }
 
-        return double.Round(requiredSpeed.MinutesPerKilometer, 2);
+        // Calculate required pace for remaining distance
+        var distanceRemaining = totalDistance - myProgress;
+
+        if (distanceRemaining <= 0)
+        {
+            _logger.LogWarning("Already at or past finish line");
+            return (0, leaderDistanceKm);
+        }
+
+        // Determine my elapsed time - prefer direct value, fallback to estimating from speed
+        double myElapsedTimeMinutes;
+
+        if (!string.IsNullOrWhiteSpace(elapsedTimeStr) && 
+            double.TryParse(elapsedTimeStr, NumberStyles.Float, CultureInfo.InvariantCulture, out var elapsedMinutes))
+        {
+            // Use provided elapsed time (in minutes)
+            myElapsedTimeMinutes = elapsedMinutes;
+            var currentPace = myProgress > 0 ? myElapsedTimeMinutes / myProgress : 0;
+            _logger.LogInformation("Using provided elapsed time: {ElapsedTime} ({Pace:F2} min/km pace)",
+                TimeSpan.FromMinutes(myElapsedTimeMinutes).ToString(@"hh\:mm\:ss"), currentPace);
+        }
+        else if (!string.IsNullOrWhiteSpace(currentSpeedStr) && 
+                 double.TryParse(currentSpeedStr, NumberStyles.Float, CultureInfo.InvariantCulture, out var speedMps))
+        {
+            // Fallback: estimate from current speed (m/s to min/km)
+            var currentPaceMinPerKm = 1000.0 / (speedMps * 60.0);
+            myElapsedTimeMinutes = myProgress * currentPaceMinPerKm;
+            _logger.LogInformation("Estimated elapsed time from speed: {ElapsedTime} ({Pace:F2} min/km pace)",
+                TimeSpan.FromMinutes(myElapsedTimeMinutes).ToString(@"hh\:mm\:ss"), currentPaceMinPerKm);
+        }
+        else
+        {
+            // No time data available, assume average 5:00 min/km pace
+            myElapsedTimeMinutes = myProgress * 5.0;
+            _logger.LogWarning("No elapsed time or speed provided, assuming 5:00 min/km pace: {ElapsedTime}",
+                TimeSpan.FromMinutes(myElapsedTimeMinutes).ToString(@"hh\:mm\:ss"));
+        }
+
+        var actualTimeRemaining = Math.Max(0, targetFinishTime.TotalMinutes - myElapsedTimeMinutes);
+        var requiredPaceMinPerKm = actualTimeRemaining / distanceRemaining;
+
+        if (double.IsInfinity(requiredPaceMinPerKm) || double.IsNaN(requiredPaceMinPerKm) || requiredPaceMinPerKm <= 0)
+        {
+            requiredPaceMinPerKm = myProgress > 0 ? myElapsedTimeMinutes / myProgress : 5.0;
+        }
+
+        _logger.LogInformation("Progress: {Progress} km / {Total} km. Elapsed: {Elapsed}. Required pace: {RequiredPace:F2} min/km. Time remaining: {TimeRemaining}",
+            myProgress, totalDistance, TimeSpan.FromMinutes(myElapsedTimeMinutes).ToString(@"hh\:mm\:ss"),
+            requiredPaceMinPerKm, TimeSpan.FromMinutes(actualTimeRemaining).ToString(@"hh\:mm\:ss"));
+
+        return (Math.Round(requiredPaceMinPerKm, 2), Math.Round(leaderDistanceKm, 2));
     }
 
     private double GetTotalDistance(string raceName)

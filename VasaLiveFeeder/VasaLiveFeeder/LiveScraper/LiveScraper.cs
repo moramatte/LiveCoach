@@ -108,42 +108,47 @@ public class LiveScraper : ILiveScraper
             Console.WriteLine($"[GetLeaderDataWithScraperAsync] BROWSERLESS_TOKEN present: {!string.IsNullOrWhiteSpace(browserlessToken)}");
             Console.WriteLine($"[GetLeaderDataWithScraperAsync] GROQ_API_KEY present: {!string.IsNullOrWhiteSpace(groqApiKey)}");
 
-            if (!string.IsNullOrWhiteSpace(browserlessToken))
+            string? htmlContent = null;
+            string renderMethod = "unknown";
+
+            // Try scraper service first (if SCRAPER_SERVICE_URL is set)
+            var scraperServiceUrl = Environment.GetEnvironmentVariable("SCRAPER_SERVICE_URL");
+            if (!string.IsNullOrWhiteSpace(scraperServiceUrl))
+            {
+                try
+                {
+                    Console.WriteLine($"[ScraperService] Using scraper service at {scraperServiceUrl}");
+                    htmlContent = await GetRenderedHtmlViaScraperServiceAsync(url, scraperServiceUrl, timeoutMs).ConfigureAwait(false);
+                    renderMethod = "ScraperService";
+                    Console.WriteLine($"[ScraperService] Successfully rendered HTML ({htmlContent?.Length ?? 0} chars)");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[ScraperService] Failed: {ex.Message}. Will try Browserless or Playwright...");
+                    htmlContent = null;
+                }
+            }
+
+            // Try Browserless if scraper service didn't work and we have a token
+            if (htmlContent == null && !string.IsNullOrWhiteSpace(browserlessToken))
             {
                 try
                 {
                     Console.WriteLine($"[Browserless] Attempting to fetch {url}");
-                    var htmlContent = await GetRenderedHtmlViaBrowserlessAsync(url, browserlessToken, timeoutMs).ConfigureAwait(false);
-                    if (!string.IsNullOrWhiteSpace(htmlContent))
-                    {
-                        Console.WriteLine($"[Browserless] Successfully rendered HTML for {url} ({htmlContent.Length} chars)");
-                        var browserlessResult = await AnalyzeWithAgentAsync(htmlContent).ConfigureAwait(false);
-                        if (browserlessResult != null)
-                        {
-                            Console.WriteLine($"[Browserless] AI extraction succeeded: {browserlessResult.DistanceKm} km");
-                            AddToCache(url, browserlessResult);
-                        }
-                        else
-                        {
-                            Console.WriteLine($"[Browserless] AI extraction returned null");
-                        }
-                        return browserlessResult;
-                    }
-                    else
-                    {
-                        Console.WriteLine($"[Browserless] Returned empty HTML content");
-                    }
+                    htmlContent = await GetRenderedHtmlViaBrowserlessAsync(url, browserlessToken, timeoutMs).ConfigureAwait(false);
+                    renderMethod = "Browserless";
+                    Console.WriteLine($"[Browserless] Successfully rendered HTML ({htmlContent?.Length ?? 0} chars)");
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[Browserless error]: {ex.Message}. Stack: {ex.StackTrace}. Falling back to Playwright...");
+                    Console.WriteLine($"[Browserless] Failed: {ex.Message}. Will try Playwright...");
+                    htmlContent = null;
                 }
             }
-            else
-            {
-                Console.WriteLine($"[GetLeaderDataWithScraperAsync] BROWSERLESS_TOKEN not set, skipping Browserless");
-            }
 
+            // Try Playwright as last resort
+            if (htmlContent == null)
+            {
                 Console.WriteLine($"[Playwright] Attempting fallback for {url}");
                 await EnsurePlaywrightBrowsersInstalledAsync().ConfigureAwait(false);
                 using var playwright = await Playwright.CreateAsync().ConfigureAwait(false);
@@ -152,43 +157,63 @@ public class LiveScraper : ILiveScraper
                 page.SetDefaultTimeout(timeoutMs);
 
                 await page.GotoAsync(url, new PageGotoOptions { WaitUntil = WaitUntilState.NetworkIdle }).ConfigureAwait(false);
-                var pageContent = await page.ContentAsync().ConfigureAwait(false);
-
-                Console.WriteLine($"[Playwright] Successfully fetched HTML ({pageContent.Length} chars)");
-
-                var playwrightResult = await AnalyzeWithAgentAsync(pageContent).ConfigureAwait(false);
-                if (playwrightResult != null)
-                {
-                    Console.WriteLine($"[Playwright] AI extraction succeeded: {playwrightResult.DistanceKm} km");
-                    AddToCache(url, playwrightResult);
-                }
-                else
-                {
-                    Console.WriteLine($"[Playwright] AI extraction returned null");
-                }
-                return playwrightResult;
+                htmlContent = await page.ContentAsync().ConfigureAwait(false);
+                renderMethod = "Playwright";
+                Console.WriteLine($"[Playwright] Successfully fetched HTML ({htmlContent.Length} chars)");
             }
-            catch (Exception ex)
+
+            // Now analyze the HTML with AI
+            if (string.IsNullOrWhiteSpace(htmlContent))
             {
-                Console.WriteLine($"[GetLeaderDataWithScraperAsync error]: {ex.Message}");
-                Console.WriteLine($"[GetLeaderDataWithScraperAsync stack]: {ex.StackTrace}");
+                Console.WriteLine($"[ERROR] All rendering methods failed to produce HTML content");
                 return null;
             }
-    }
 
-    public async Task<LeaderData?> AnalyzeWithAgentAsync(string content)
+            Console.WriteLine($"[{renderMethod}] Analyzing HTML with AI...");
+            var result = await AnalyzeWithAgentAsync(htmlContent).ConfigureAwait(false);
+
+            if (result != null)
+            {
+                Console.WriteLine($"[{renderMethod}] AI extraction succeeded: {result.DistanceKm} km, Time: {result.ElapsedTime}");
+                AddToCache(url, result);
+            }
+            else
+            {
+                Console.WriteLine($"[{renderMethod}] AI extraction returned null. HTML was retrieved successfully but AI could not extract race data.");
+                Console.WriteLine($"[{renderMethod}] This likely means:");
+                Console.WriteLine($"  1. The race page format has changed");
+                Console.WriteLine($"  2. The race has not started yet (no leader data available)");
+                Console.WriteLine($"  3. The AI model failed to parse the data");
+                Console.WriteLine($"  4. GROQ_API_KEY may be invalid or out of credits");
+            }
+
+                    return result;
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[GetLeaderDataWithScraperAsync error]: {ex.Message}");
+                    Console.WriteLine($"[GetLeaderDataWithScraperAsync stack]: {ex.StackTrace}");
+                    return null;
+                }
+            }
+
+            public async Task<LeaderData?> AnalyzeWithAgentAsync(string content)
     {
         if (string.IsNullOrWhiteSpace(_groqApiKey))
         {
-            Console.WriteLine("[AnalyzeWithAgent]: No GROQ_API_KEY found");
+            Console.WriteLine("[AnalyzeWithAgent]: No GROQ_API_KEY found - cannot extract data with AI");
             return null;
         }
 
         try
         {
             var extractedData = ExtractRaceData(content);
-            Console.WriteLine($"[Groq] Processing {extractedData.Length} chars");
-            
+            Console.WriteLine($"[Groq] Processing {extractedData.Length} chars of extracted race data");
+
+            // Log a sample of what we're sending to the AI
+            var sample = extractedData.Length > 500 ? extractedData.Substring(0, 500) + "..." : extractedData;
+            Console.WriteLine($"[Groq] Sample data being sent to AI:\n{sample}");
+
             var requestBody = new
             {
                 model = "llama-3.3-70b-versatile",
@@ -231,6 +256,16 @@ public class LiveScraper : ILiveScraper
             if (!response.IsSuccessStatusCode)
             {
                 Console.WriteLine($"[Groq API error {response.StatusCode}]: {responseBody}");
+
+                if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+                {
+                    Console.WriteLine($"[Groq] Authentication failed - GROQ_API_KEY may be invalid");
+                }
+                else if ((int)response.StatusCode == 429)
+                {
+                    Console.WriteLine($"[Groq] Rate limit exceeded or out of credits");
+                }
+
                 return null;
             }
 
@@ -246,6 +281,11 @@ public class LiveScraper : ILiveScraper
             if (parsed == null)
             {
                 Console.WriteLine($"[DIAGNOSTIC] ParseAIResponse returned NULL for AI result: '{aiResult}'");
+                Console.WriteLine($"[DIAGNOSTIC] This means the AI could not extract valid distance/time from the HTML");
+            }
+            else
+            {
+                Console.WriteLine($"[SUCCESS] Parsed leader data: {parsed.DistanceKm} km, Time: {parsed.ElapsedTime}");
             }
 
             return parsed;

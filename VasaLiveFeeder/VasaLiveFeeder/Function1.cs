@@ -31,6 +31,7 @@ public class Function1
         string raceName = null;
         string progressStr = null;
         string currentSpeedStr = null;
+        bool dryRun = false;
         var rawQuery = req.Url.Query; // starts with '?' when present
         try
         {
@@ -46,6 +47,7 @@ public class Function1
                     if (key == "racename" || key == "race") raceName = val;
                     if (key == "progressinkm" || key == "progress" || key == "km") progressStr = val;
                     if (key == "currentspeed" || key == "speed") currentSpeedStr = val;
+                    if (key == "dryrun") dryRun = val.Equals("true", StringComparison.OrdinalIgnoreCase) || val == "1";
                 }
             }
         }
@@ -77,6 +79,7 @@ public class Function1
                             if (root.TryGetProperty("km", out var jProg3)) progressStr ??= jProg3.GetRawText().Trim('"');
                             if (root.TryGetProperty("currentSpeed", out var jSpeed)) currentSpeedStr ??= jSpeed.GetRawText().Trim('"');
                             if (root.TryGetProperty("speed", out var jSpeed2)) currentSpeedStr ??= jSpeed2.GetRawText().Trim('"');
+                            if (root.TryGetProperty("dryRun", out var jDry)) dryRun = jDry.GetBoolean();
                         }
                         catch (JsonException) { /* ignore parse errors below */ }
                     }
@@ -135,7 +138,7 @@ public class Function1
         double newSpeed;
         try
         {
-             newSpeed = await DeriveTempoDelta(raceName, progressStr, currentSpeedStr);
+             newSpeed = await DeriveTempoDelta(raceName, progressStr, currentSpeedStr, dryRun);
         }
         catch (Exception e)
         {
@@ -149,8 +152,37 @@ public class Function1
         return await CreateJsonResponse(req, result, HttpStatusCode.OK);
     }
 
-    public async Task<double> DeriveDistanceDelta(string raceName, double myProgress)
+    public async Task<double> DeriveDistanceDelta(string raceName, double myProgress, bool dryRun = false)
     {
+        if (dryRun)
+        {
+            // Dry run mode: Simulate a race starting at the top of each hour
+            // Leader pace: 4.7619 m/s (17.143 km/h or 3.5 min/km)
+            const double leaderPaceMetersPerSecond = 4.7619;
+
+            var now = DateTime.UtcNow;
+            var minutesSinceHour = now.Minute + (now.Second / 60.0);
+            var raceTimeMinutes = minutesSinceHour;
+            var leaderDistanceKm = (leaderPaceMetersPerSecond * raceTimeMinutes * 60) / 1000.0;
+
+            _logger.LogInformation("DRY RUN: Current time {Time}, minutes since hour: {Minutes}, leader at {Distance} km", 
+                now.ToString("HH:mm:ss"), raceTimeMinutes, leaderDistanceKm);
+
+            var progressPlusFiftyPercent = myProgress * 1.5;
+            var distanceDelta = leaderDistanceKm - progressPlusFiftyPercent;
+
+            if (distanceDelta < 0)
+            {
+                if (dryRun)
+                {
+                    return 0;
+                }
+                throw  new InvalidOperationException($"Distance delta cannot be negative. Leader: {leaderDistanceKm:F2} km, My progress + 50%: {progressPlusFiftyPercent:F2} km");
+            }
+
+            return distanceDelta;
+        }
+
         var scraper = ServiceLocator.Resolve<ILiveScraper>();
 
         // debugUrl = "https://live.eqtiming.com/73153#result:297321-0-1308925-1-1-";
@@ -187,10 +219,33 @@ public class Function1
 
         if (leaderData == null)
         {
-            var errorMsg = $"Could not extract leader distance from race page. URL: {url}. " +
-                          $"Scraper service ({scraperServiceUrl}) may be unreachable or returned invalid data. " +
-                          "Check Azure Function logs and verify scraper service is running. " +
-                          $"Test scraper health: {scraperServiceUrl}/health";
+            // More specific error message based on configuration
+            var configErrors = new List<string>();
+
+            if (string.IsNullOrWhiteSpace(scraperServiceUrl))
+                configErrors.Add("SCRAPER_SERVICE_URL not configured");
+
+            if (string.IsNullOrWhiteSpace(groqApiKey))
+                configErrors.Add("GROQ_API_KEY not configured");
+
+            string errorMsg;
+            if (configErrors.Any())
+            {
+                errorMsg = $"Configuration error: {string.Join(", ", configErrors)}. " +
+                          "Set these in Azure Function App Settings.";
+            }
+            else
+            {
+                errorMsg = $"Failed to extract leader data from race page: {url}. " +
+                          "Possible reasons:\n" +
+                          $"1. Scraper service ({scraperServiceUrl}) may be unreachable - test: {scraperServiceUrl}/health\n" +
+                          "2. The race may not have started yet (no leader data available)\n" +
+                          "3. The race page format may have changed\n" +
+                          "4. AI extraction failed - check GROQ_API_KEY validity and credits\n" +
+                          "5. Network connectivity issues\n" +
+                          "Check Azure Function logs (Application Insights) for detailed error messages.";
+            }
+
             _logger.LogError(errorMsg);
             throw new InvalidOperationException(errorMsg);
         }
@@ -204,14 +259,14 @@ public class Function1
         return delta;
     }
 
-    public async Task<double> DeriveTempoDelta(string raceName, string myProgressStr, string meanSpeedStr)
+    public async Task<double> DeriveTempoDelta(string raceName, string myProgressStr, string meanSpeedStr, bool dryRun = false)
     {
         var meanSpeed = Speed.FromKilometersPerHour(double.Parse(meanSpeedStr, CultureInfo.InvariantCulture));
 
         var myProgress = double.Parse(myProgressStr, CultureInfo.InvariantCulture);
         var totalDistance = GetTotalDistance(raceName);
 
-        var behindInKm = await DeriveDistanceDelta(raceName, myProgress);
+        var behindInKm = await DeriveDistanceDelta(raceName, myProgress, dryRun);
 
         var kmToGo = totalDistance - myProgress;
         var catchUpPerKm = behindInKm / kmToGo;
@@ -253,6 +308,8 @@ public class Function1
             "halvvasan" => 45,
             "ladiagonela" => 47.0,
             "craft" => 42.0,
+            "test10k" => 10.0,
+            "test20k" => 20.0,
             "craft ski marathon" => 42.0,
             "sya" => 40.0,
             "k-byggslingan" => 40.0,
@@ -272,6 +329,8 @@ public class Function1
             "craft" => "https://live.eqtiming.com/73152",
             "craft ski marathon" => "https://live.eqtiming.com/73152",
             "ladiagonela" => "https://skiclassics.com/live-center/?event=9620&season=2026&gender=men",
+            "test10k" => "_",
+            "test20k" => "_",
             _ => throw new Exception($"No race url defined for {raceName}")
         };
 

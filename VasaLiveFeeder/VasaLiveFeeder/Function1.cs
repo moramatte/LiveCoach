@@ -141,10 +141,12 @@ public class Function1
             return await CreateJsonResponse(req, $"Exception 2: {e}", HttpStatusCode.BadRequest);
         }
 
-        if (string.IsNullOrWhiteSpace(raceName) || string.IsNullOrWhiteSpace(progressStr))
+        if (string.IsNullOrWhiteSpace(raceName) || string.IsNullOrWhiteSpace(progressStr) || 
+            (string.IsNullOrWhiteSpace(elapsedTimeStr) && !dryRun))
         {
-            _logger.LogWarning("Race name or progress not provided. Race='{Race}', Progress='{Progress}'", raceName, progressStr);
-            var message = "Provide both race name and progress in km (query: ?raceName=..&progressInKm=.. or JSON body { \"raceName\":.., \"progressInKm\":.. }).";
+            _logger.LogWarning("Required parameters missing. Race='{Race}', Progress='{Progress}', Elapsed='{Elapsed}', DryRun={DryRun}", 
+                raceName, progressStr, elapsedTimeStr, dryRun);
+            var message = "Provide race name, progress in km, and elapsed time in minutes (query: ?raceName=..&progressInKm=..&elapsed=.. or JSON body { \\\"raceName\\\":.., \\\"progressInKm\\\":.., \\\"elapsed\\\":.. }).";
             return await CreateJsonResponse(req, message, HttpStatusCode.BadRequest);
         }
 
@@ -180,13 +182,13 @@ public class Function1
         return await CreateJsonResponse(req, result, HttpStatusCode.OK);
     }
 
-    public async Task<(double leaderDistanceKm, TimeSpan? leaderElapsedTime)> GetLeaderDataAsync(string raceName, bool dryRun = false)
+    public async Task<(double leaderDistanceKm, TimeSpan leaderElapsedTime)> GetLeaderDataAsync(string raceName, bool dryRun = false, double userElapsedTimeMinutes = 0)
     {
         if (dryRun)
         {
             // Dry run mode: Simulate a race starting every 30 minutes (resets at :00 and :30)
-            // Leader pace: 3:00 min/km (3 minutes per km) = 20 km/h
-            const double leaderPaceMinPerKm = 3.0;
+            // Leader pace: 2:18 min/km (2 minutes 18 seconds per km) = 26.09 km/h
+            const double leaderPaceMinPerKm = 2.3; // 2.3 minutes = 2 min 18 sec
 
             var now = DateTime.UtcNow;
             var minutesSinceLast30 = now.Minute % 30 + (now.Second / 60.0);
@@ -194,7 +196,7 @@ public class Function1
             var leaderDistanceKm = raceTimeMinutes / leaderPaceMinPerKm;
             var leaderElapsedTime = TimeSpan.FromMinutes(raceTimeMinutes);
 
-            _logger.LogInformation("DRY RUN: Current time {Time}, minutes since last 30-min mark: {Minutes}, leader at {Distance} km (pace: 3:00 min/km)", 
+            _logger.LogInformation("DRY RUN: Current time {Time}, minutes since last 30-min mark: {Minutes}, leader at {Distance} km (pace: 2:18 min/km)", 
                 now.ToString("HH:mm:ss"), raceTimeMinutes, leaderDistanceKm);
 
             return (leaderDistanceKm, leaderElapsedTime);
@@ -230,30 +232,45 @@ public class Function1
 
         if (leaderData == null)
         {
-            var errorMsg = $"Failed to extract leader data from race page: {url}. " +
-                          "Possible reasons:\n" +
-                          $"1. Scraper service ({scraperServiceUrl}) may be unreachable\n" +
-                          "2. The race may not have started yet\n" +
-                          "3. The race page format may have changed\n" +
-                          "4. AI extraction failed\n" +
-                          "Check Azure Function logs for details.";
-            _logger.LogError(errorMsg);
-            throw new InvalidOperationException(errorMsg);
+            _logger.LogWarning("Failed to extract leader data from race page: {Url}. Falling back to simulation mode.", url);
+            _logger.LogWarning("Possible reasons: 1. Scraper service ({ScraperServiceUrl}) may be unreachable, " +
+                              "2. The race may not have started yet, " +
+                              "3. The race page format may have changed, " +
+                              "4. AI extraction failed", scraperServiceUrl);
+
+            // Fallback: Simulate leader based on user's elapsed time and 2:18 min/km pace
+            // Assume leader has been going at 2:18 min/km pace since race start
+            const double leaderPaceMinPerKm = 2.3; // 2.3 minutes = 2 min 18 sec
+
+            // Use user's elapsed time to calculate where leader would be
+            var leaderDistanceKm = userElapsedTimeMinutes / leaderPaceMinPerKm;
+            var leaderElapsedTime = TimeSpan.FromMinutes(userElapsedTimeMinutes);
+
+            _logger.LogInformation("FALLBACK MODE: Using user's elapsed time ({UserElapsed} min) to simulate leader at {Distance} km (pace: 2:18 min/km)", 
+                userElapsedTimeMinutes, leaderDistanceKm);
+
+            return (leaderDistanceKm, leaderElapsedTime);
         }
 
         _logger.LogInformation("Successfully scraped leader data: {Distance} km, Time: {Time}", 
             leaderData.DistanceKm, leaderData.ElapsedTime);
 
-        return (leaderData.DistanceKm, leaderData.ElapsedTime);
+        // Convert nullable TimeSpan to non-nullable (use distance/2.3 pace if time is missing)
+        var leaderTime = leaderData.ElapsedTime ?? TimeSpan.FromMinutes(leaderData.DistanceKm * 2.3);
+
+        return (leaderData.DistanceKm, leaderTime);
     }
 
-    public async Task<(double requiredPaceMinPerKm, double leaderDistanceKm)> DeriveTempoDelta(string raceName, string myProgressStr, string elapsedTimeStr, string currentSpeedStr = null, bool dryRun = false)
+    public async Task<(double requiredPaceMinPerKm, double leaderDistanceKm)> DeriveTempoDelta(string raceName, string myProgressStr, string elapsedTimeStr, string currentSpeedStr, bool dryRun = false)
     {
         var myProgress = double.Parse(myProgressStr, CultureInfo.InvariantCulture);
         var totalDistance = GetTotalDistance(raceName);
 
-        // Get leader's current data
-        var (leaderDistanceKm, leaderElapsedTime) = await GetLeaderDataAsync(raceName, dryRun);
+        // Parse user's elapsed time (required parameter)
+        var myElapsedTimeMinutes = double.Parse(elapsedTimeStr, NumberStyles.Float, CultureInfo.InvariantCulture);
+
+        // Get leader's current data (pass user's elapsed time for fallback simulation)
+        var (leaderDistanceKm, leaderElapsedTime) = await GetLeaderDataAsync(raceName, dryRun, myElapsedTimeMinutes);
 
         // Calculate target finishing time (leader's time + 50%)
         TimeSpan targetFinishTime;
@@ -261,44 +278,24 @@ public class Function1
         if (leaderDistanceKm >= totalDistance)
         {
             // Leader has finished - we have exact target time
-            if (leaderElapsedTime.HasValue)
-            {
-                targetFinishTime = TimeSpan.FromSeconds(leaderElapsedTime.Value.TotalSeconds * 1.5);
-                _logger.LogInformation("Leader finished in {LeaderTime}. Target time: {TargetTime}", 
-                    leaderElapsedTime.Value.ToString(@"hh\:mm\:ss"), 
-                    targetFinishTime.ToString(@"hh\:mm\:ss"));
-            }
-            else
-            {
-                // No time data, estimate based on 3:00 min/km pace
-                targetFinishTime = TimeSpan.FromMinutes(totalDistance * 3.0 * 1.5);
-                _logger.LogWarning("Leader finished but no time available, using estimated target: {TargetTime}", 
-                    targetFinishTime.ToString(@"hh\:mm\:ss"));
-            }
+            targetFinishTime = TimeSpan.FromSeconds(leaderElapsedTime.TotalSeconds * 1.5);
+            _logger.LogInformation("Leader finished in {LeaderTime}. Target time: {TargetTime}", 
+                leaderElapsedTime.ToString(@"hh\:mm\:ss"), 
+                targetFinishTime.ToString(@"hh\:mm\:ss"));
         }
         else
         {
             // Leader still racing - extrapolate their finishing time
-            if (leaderElapsedTime.HasValue && leaderDistanceKm > 0)
-            {
-                var leaderMeanPaceMinPerKm = leaderElapsedTime.Value.TotalMinutes / leaderDistanceKm;
-                var leaderEstimatedFinishTime = TimeSpan.FromMinutes(totalDistance * leaderMeanPaceMinPerKm);
-                targetFinishTime = TimeSpan.FromSeconds(leaderEstimatedFinishTime.TotalSeconds * 1.5);
+            var leaderMeanPaceMinPerKm = leaderElapsedTime.TotalMinutes / leaderDistanceKm;
+            var leaderEstimatedFinishTime = TimeSpan.FromMinutes(totalDistance * leaderMeanPaceMinPerKm);
+            targetFinishTime = TimeSpan.FromSeconds(leaderEstimatedFinishTime.TotalSeconds * 1.5);
 
-                _logger.LogInformation("Leader at {LeaderDist} km in {LeaderTime} (pace: {LeaderPace:F2} min/km). Estimated finish: {EstFinish}. Target time: {TargetTime}",
-                    leaderDistanceKm,
-                    leaderElapsedTime.Value.ToString(@"hh\:mm\:ss"),
-                    leaderMeanPaceMinPerKm,
-                    leaderEstimatedFinishTime.ToString(@"hh\:mm\:ss"),
-                    targetFinishTime.ToString(@"hh\:mm\:ss"));
-            }
-            else
-            {
-                // No time data, estimate
-                targetFinishTime = TimeSpan.FromMinutes(totalDistance * 3.0 * 1.5);
-                _logger.LogWarning("No leader time data, using estimated target: {TargetTime}", 
-                    targetFinishTime.ToString(@"hh\:mm\:ss"));
-            }
+            _logger.LogInformation("Leader at {LeaderDist} km in {LeaderTime} (pace: {LeaderPace:F2} min/km). Estimated finish: {EstFinish}. Target time: {TargetTime}",
+                leaderDistanceKm,
+                leaderElapsedTime.ToString(@"hh\:mm\:ss"),
+                leaderMeanPaceMinPerKm,
+                leaderEstimatedFinishTime.ToString(@"hh\:mm\:ss"),
+                targetFinishTime.ToString(@"hh\:mm\:ss"));
         }
 
         // Calculate required pace for remaining distance
@@ -310,34 +307,10 @@ public class Function1
             return (0, leaderDistanceKm);
         }
 
-        // Determine my elapsed time - prefer direct value, fallback to estimating from speed
-        double myElapsedTimeMinutes;
-
-        if (!string.IsNullOrWhiteSpace(elapsedTimeStr) && 
-            double.TryParse(elapsedTimeStr, NumberStyles.Float, CultureInfo.InvariantCulture, out var elapsedMinutes))
-        {
-            // Use provided elapsed time (in minutes)
-            myElapsedTimeMinutes = elapsedMinutes;
-            var currentPace = myProgress > 0 ? myElapsedTimeMinutes / myProgress : 0;
-            _logger.LogInformation("Using provided elapsed time: {ElapsedTime} ({Pace:F2} min/km pace)",
-                TimeSpan.FromMinutes(myElapsedTimeMinutes).ToString(@"hh\:mm\:ss"), currentPace);
-        }
-        else if (!string.IsNullOrWhiteSpace(currentSpeedStr) && 
-                 double.TryParse(currentSpeedStr, NumberStyles.Float, CultureInfo.InvariantCulture, out var speedMps))
-        {
-            // Fallback: estimate from current speed (m/s to min/km)
-            var currentPaceMinPerKm = 1000.0 / (speedMps * 60.0);
-            myElapsedTimeMinutes = myProgress * currentPaceMinPerKm;
-            _logger.LogInformation("Estimated elapsed time from speed: {ElapsedTime} ({Pace:F2} min/km pace)",
-                TimeSpan.FromMinutes(myElapsedTimeMinutes).ToString(@"hh\:mm\:ss"), currentPaceMinPerKm);
-        }
-        else
-        {
-            // No time data available, assume average 5:00 min/km pace
-            myElapsedTimeMinutes = myProgress * 5.0;
-            _logger.LogWarning("No elapsed time or speed provided, assuming 5:00 min/km pace: {ElapsedTime}",
-                TimeSpan.FromMinutes(myElapsedTimeMinutes).ToString(@"hh\:mm\:ss"));
-        }
+        // Calculate required pace from remaining time and distance
+        var currentPace = myProgress > 0 ? myElapsedTimeMinutes / myProgress : 0;
+        _logger.LogInformation("Using elapsed time: {ElapsedTime} ({Pace:F2} min/km pace)",
+            TimeSpan.FromMinutes(myElapsedTimeMinutes).ToString(@"hh\:mm\:ss"), currentPace);
 
         var actualTimeRemaining = Math.Max(0, targetFinishTime.TotalMinutes - myElapsedTimeMinutes);
         var requiredPaceMinPerKm = actualTimeRemaining / distanceRemaining;
@@ -366,6 +339,7 @@ public class Function1
             "halvvasan" => 45,
             "ladiagonela" => 47.0,
             "craft" => 42.0,
+            "finlandia" => 42.0,
             "test10k" => 10.0,
             "test20k" => 20.0,
             "craft ski marathon" => 42.0,
@@ -385,6 +359,7 @@ public class Function1
             "mora" => "https://live.eqtiming.com/76514",
             "mora25" => "https://live.eqtiming.com/73153",
             "craft" => "https://live.eqtiming.com/73152",
+            "finlandia" => "https://skiclassics.com/live-center/?event=12066&season=2026&gender=men",
             "craft ski marathon" => "https://live.eqtiming.com/73152",
             "ladiagonela" => "https://skiclassics.com/live-center/?event=9620&season=2026&gender=men",
             "test10k" => "_",

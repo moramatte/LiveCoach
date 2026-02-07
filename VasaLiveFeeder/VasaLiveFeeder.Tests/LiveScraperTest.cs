@@ -74,7 +74,18 @@ namespace VasaLiveFeeder.Tests
         public async Task LiveDataIsScrapedFromSkiClassics()
         {
             var scraper = new LiveScraper.LiveScraper();
-            var data = await scraper.GetLeaderDataAsync("https://skiclassics.com/live-center/?event=1296&season=2026&gender=men");
+            var data = await scraper.GetLeaderDataWithScraperAsync("https://skiclassics.com/live-center/?event=1296&season=2026&gender=men");
+
+            Assert.IsNotNull(data);
+            Assert.AreEqual(30, data.DistanceKm);
+            Assert.AreEqual(new TimeSpan(1, 28, 48), data.ElapsedTime);
+        }
+
+        [TestMethod]
+        public async Task LiveDataIsScrapedFromSkiClassicsFinlandia()
+        {
+            var scraper = new LiveScraper.LiveScraper();
+            var data = await scraper.GetLeaderDataWithScraperAsync("https://skiclassics.com/live-center/?event=12066&season=2026&gender=men");
 
             Assert.IsNotNull(data);
             Assert.AreEqual(30, data.DistanceKm);

@@ -20,62 +20,120 @@ public class Function1Tests
     {
         BootstrapperForLiveFeeder.Reset();
         ServiceLocator.RegisterTransient<ILiveScraper, TestableLiveScraper>();
+        // Set up test data: leader at 60 km after 180 minutes (3:00 min/km pace)
         TestableLiveScraper.ReturnValue = 60;
+        TestableLiveScraper.ReturnTime = TimeSpan.FromMinutes(180);
     }
 
     [TestMethod]
-    public async Task Run_ReturnsCoordinates_FromQuery()
+    public async Task Run_ReturnsRequiredPaceAndLeaderDistance()
     {
         var func = new Function1(NullLogger<Function1>.Instance);
-        var req = new TestHttpRequestData(new Uri("http://localhost?raceName=Vasaloppet&km=14.67"), "GET", "");
+        // Simulate: Vasaloppet 90km, I'm at 30km after 150 minutes (5:00 min/km pace)
+        var req = new TestHttpRequestData(
+            new Uri("http://localhost?raceName=Vasaloppet&progressInKm=30&elapsedTime=150"), 
+            "GET", 
+            "");
 
         var resp = await func.Run(req);
 
         Assert.AreEqual(HttpStatusCode.OK, resp.StatusCode);
         var body = ((TestHttpResponseData)resp).GetBodyAsString();
         var obj = JsonSerializer.Deserialize<JsonElement>(body);
-        Assert.AreEqual("Vasaloppet", obj.GetProperty("raceName").GetString());
-        Assert.AreEqual(14.67, obj.GetProperty("progressKm").GetDouble());
+
+        // Should return required pace in min/km and leader distance
+        Assert.IsTrue(obj.TryGetProperty("newSpeed", out var newSpeed));
+        Assert.IsTrue(obj.TryGetProperty("leaderDistanceKm", out var leaderDist));
+        Assert.AreEqual(60.0, leaderDist.GetDouble());
+        Assert.IsTrue(newSpeed.GetDouble() > 0); // Should be a valid pace
     }
 
     [TestMethod]
-    public async Task BehindDistCanBeDerived()
+    public async Task GetLeaderDataAsync_ReturnsLeaderDistanceAndTime()
     {
         var func = new Function1(NullLogger<Function1>.Instance);
 
-        var delta = await func.DeriveDistanceDelta("Vasaloppet", 30.00);
-        Assert.AreEqual(15.00, delta);
+        // Test dry run mode
+        var (distance, time) = await func.GetLeaderDataAsync("test10k", dryRun: true);
 
-        delta = await func.DeriveDistanceDelta("Vasaloppet", 60.00);
-        Assert.AreEqual(-30, delta);
-
-        delta = await func.DeriveDistanceDelta("Vasaloppet", 40.00);
-        Assert.AreEqual(0, delta);
+        Assert.IsTrue(distance >= 0);
+        Assert.IsTrue(time.HasValue);
+        Assert.IsTrue(time.Value.TotalMinutes > 0);
     }
 
     [TestMethod]
-    public async Task DeltaCanBeDerived()
+    public async Task DeriveTempoDelta_CalculatesRequiredPace()
     {
         var func = new Function1(NullLogger<Function1>.Instance);
 
-        var speed15 = Speed.FromKilometersPerHour(15);
-        var speed18_75 = Speed.FromKilometersPerHour(18.75);
+        // Scenario: Vasaloppet 90km race
+        // Leader at 60km in 180 minutes (3:00 min/km pace)
+        // Me at 30km after 150 minutes (5:00 min/km pace)
+        // Target: Leader's time * 1.5 = finish at 90km in ~270 min * 1.5 = 405 min
+        // I have 255 minutes left for 60km remaining
 
-        var delta = await func.DeriveTempoDelta("Vasaloppet", "40.00", "15.00");
-        Assert.AreEqual(speed15.KilometersPerHour, delta);
+        var (requiredPace, leaderDistance) = await func.DeriveTempoDelta("Vasaloppet", "30.00", "150", dryRun: false);
 
-        delta = await func.DeriveTempoDelta("Vasaloppet", "30.00", "15.00");
-        Assert.AreEqual(speed18_75.KilometersPerHour, delta);
+        Assert.AreEqual(60.0, leaderDistance);
+        Assert.IsTrue(requiredPace > 0, "Required pace should be positive");
+        Assert.IsTrue(requiredPace < 10, "Required pace should be reasonable (< 10 min/km)");
     }
 
     [TestMethod]
-    public async Task Run_ReturnsBadRequest_WhenMissing()
+    public async Task DeriveTempoDelta_UsesElapsedTime_WhenProvided()
     {
         var func = new Function1(NullLogger<Function1>.Instance);
-        var req = new TestHttpRequestData(new Uri("http://localhost"), "POST", "");
+
+        // Use elapsed time directly (preferred method)
+        var (pace1, _) = await func.DeriveTempoDelta("test10k", "5.0", "25", dryRun: true);
+
+        // Should calculate based on 25 minutes elapsed
+        Assert.IsTrue(pace1 > 0);
+    }
+
+    [TestMethod]
+    public async Task DeriveTempoDelta_FallsBackToSpeed_WhenNoElapsedTime()
+    {
+        var func = new Function1(NullLogger<Function1>.Instance);
+
+        // Pass null for elapsedTime, but provide currentSpeed (3.5 m/s ? 4:45 min/km)
+        var (pace1, _) = await func.DeriveTempoDelta("test10k", "5.0", null, "3.5", dryRun: true);
+
+        // Should still calculate a valid pace
+        Assert.IsTrue(pace1 > 0);
+    }
+
+    [TestMethod]
+    public async Task Run_ReturnsBadRequest_WhenMissingRaceName()
+    {
+        var func = new Function1(NullLogger<Function1>.Instance);
+        var req = new TestHttpRequestData(new Uri("http://localhost?progressInKm=10"), "GET", "");
 
         var resp = await func.Run(req);
 
         Assert.AreEqual(HttpStatusCode.BadRequest, resp.StatusCode);
+    }
+
+    [TestMethod]
+    public async Task Run_ReturnsBadRequest_WhenMissingProgress()
+    {
+        var func = new Function1(NullLogger<Function1>.Instance);
+        var req = new TestHttpRequestData(new Uri("http://localhost?raceName=Vasaloppet"), "GET", "");
+
+        var resp = await func.Run(req);
+
+        Assert.AreEqual(HttpStatusCode.BadRequest, resp.StatusCode);
+    }
+
+    [TestMethod]
+    public async Task DryRunMode_SimulatesRaceStartingEvery30Minutes()
+    {
+        var func = new Function1(NullLogger<Function1>.Instance);
+
+        // Dry run should work without real scraper data
+        var (pace, leaderDist) = await func.DeriveTempoDelta("test10k", "3.0", "15", dryRun: true);
+
+        Assert.IsTrue(pace > 0, "Dry run should return valid pace");
+        Assert.IsTrue(leaderDist >= 0, "Dry run should return valid leader distance");
     }
 }

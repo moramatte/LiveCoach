@@ -159,11 +159,13 @@ public class Function1
 
         double newSpeed;
         double leaderDistanceKm;
+        bool live;
         try
         {
-            var (pace, leaderDistance) = await DeriveTempoDelta(raceName, progressStr, elapsedTimeStr, currentSpeedStr, dryRun);
+            var (pace, leaderDistance, isLive) = await DeriveTempoDelta(raceName, progressStr, elapsedTimeStr, currentSpeedStr, dryRun);
             newSpeed = pace; // pace in min/km
             leaderDistanceKm = leaderDistance;
+            live = isLive;
         }
         catch (Exception e)
         {
@@ -177,12 +179,12 @@ public class Function1
             Log.Error(GetType(), "Derived new speed is infinity or NaN");
             newSpeed = 0.1;
         }
-        var result = new { newSpeed = newSpeed, leaderDistanceKm = leaderDistanceKm };
+        var result = new { newSpeed = newSpeed, leaderDistanceKm = leaderDistanceKm, live = live };
 
         return await CreateJsonResponse(req, result, HttpStatusCode.OK);
     }
 
-    public async Task<(double leaderDistanceKm, TimeSpan leaderElapsedTime)> GetLeaderDataAsync(string raceName, bool dryRun = false, double userElapsedTimeMinutes = 0)
+    public async Task<(double leaderDistanceKm, TimeSpan leaderElapsedTime, bool isLive)> GetLeaderDataAsync(string raceName, bool dryRun = false, double userElapsedTimeMinutes = 0)
     {
         if (dryRun)
         {
@@ -199,13 +201,16 @@ public class Function1
             _logger.LogInformation("DRY RUN: Current time {Time}, minutes since last 30-min mark: {Minutes}, leader at {Distance} km (pace: 2:18 min/km)", 
                 now.ToString("HH:mm:ss"), raceTimeMinutes, leaderDistanceKm);
 
-            return (leaderDistanceKm, leaderElapsedTime);
-        }
+                return (leaderDistanceKm, leaderElapsedTime, false); // dryRun mode: not live
+            }
 
-        var scraper = ServiceLocator.Resolve<ILiveScraper>();
-        var url = GetRaceUrl(raceName);
+            // Create scraper with logger for Application Insights integration
+            var loggerFactory = LoggerFactory.Create(builder => builder.AddApplicationInsights());
+            var scraperLogger = loggerFactory.CreateLogger<LiveScraper.LiveScraper>();
+            var scraper = new LiveScraper.LiveScraper(new HttpClient(), scraperLogger);
+            var url = GetRaceUrl(raceName);
 
-        _logger.LogInformation("Attempting to scrape race URL: {Url}", url);
+            _logger.LogInformation("Attempting to scrape race URL: {Url}", url);
 
         // Log and validate configuration
         var scraperServiceUrl = Environment.GetEnvironmentVariable("SCRAPER_SERVICE_URL");
@@ -246,22 +251,22 @@ public class Function1
             var leaderDistanceKm = userElapsedTimeMinutes / leaderPaceMinPerKm;
             var leaderElapsedTime = TimeSpan.FromMinutes(userElapsedTimeMinutes);
 
-            _logger.LogInformation("FALLBACK MODE: Using user's elapsed time ({UserElapsed} min) to simulate leader at {Distance} km (pace: 2:18 min/km)", 
-                userElapsedTimeMinutes, leaderDistanceKm);
+                    _logger.LogInformation("FALLBACK MODE: Using user's elapsed time ({UserElapsed} min) to simulate leader at {Distance} km (pace: 2:18 min/km)", 
+                        userElapsedTimeMinutes, leaderDistanceKm);
 
-            return (leaderDistanceKm, leaderElapsedTime);
-        }
+                    return (leaderDistanceKm, leaderElapsedTime, false); // fallback mode: not live
+                }
 
-        _logger.LogInformation("Successfully scraped leader data: {Distance} km, Time: {Time}", 
-            leaderData.DistanceKm, leaderData.ElapsedTime);
+                _logger.LogInformation("Successfully scraped leader data: {Distance} km, Time: {Time}", 
+                    leaderData.DistanceKm, leaderData.ElapsedTime);
 
-        // Convert nullable TimeSpan to non-nullable (use distance/2.3 pace if time is missing)
-        var leaderTime = leaderData.ElapsedTime ?? TimeSpan.FromMinutes(leaderData.DistanceKm * 2.3);
+                // Convert nullable TimeSpan to non-nullable (use distance/2.3 pace if time is missing)
+                var leaderTime = leaderData.ElapsedTime ?? TimeSpan.FromMinutes(leaderData.DistanceKm * 2.3);
 
-        return (leaderData.DistanceKm, leaderTime);
-    }
+                return (leaderData.DistanceKm, leaderTime, true); // successfully scraped: live data
+            }
 
-    public async Task<(double requiredPaceMinPerKm, double leaderDistanceKm)> DeriveTempoDelta(string raceName, string myProgressStr, string elapsedTimeStr, string currentSpeedStr, bool dryRun = false)
+    public async Task<(double requiredPaceMinPerKm, double leaderDistanceKm, bool isLive)> DeriveTempoDelta(string raceName, string myProgressStr, string elapsedTimeStr, string currentSpeedStr, bool dryRun = false)
     {
         var myProgress = double.Parse(myProgressStr, CultureInfo.InvariantCulture);
         var totalDistance = GetTotalDistance(raceName);
@@ -270,7 +275,7 @@ public class Function1
         var myElapsedTimeMinutes = double.Parse(elapsedTimeStr, NumberStyles.Float, CultureInfo.InvariantCulture);
 
         // Get leader's current data (pass user's elapsed time for fallback simulation)
-        var (leaderDistanceKm, leaderElapsedTime) = await GetLeaderDataAsync(raceName, dryRun, myElapsedTimeMinutes);
+        var (leaderDistanceKm, leaderElapsedTime, isLive) = await GetLeaderDataAsync(raceName, dryRun, myElapsedTimeMinutes);
 
         // Calculate target finishing time (leader's time + 50%)
         TimeSpan targetFinishTime;
@@ -304,7 +309,7 @@ public class Function1
         if (distanceRemaining <= 0)
         {
             _logger.LogWarning("Already at or past finish line");
-            return (0, leaderDistanceKm);
+            return (0, leaderDistanceKm, isLive);
         }
 
         // Calculate required pace from remaining time and distance
@@ -324,7 +329,7 @@ public class Function1
             myProgress, totalDistance, TimeSpan.FromMinutes(myElapsedTimeMinutes).ToString(@"hh\:mm\:ss"),
             requiredPaceMinPerKm, TimeSpan.FromMinutes(actualTimeRemaining).ToString(@"hh\:mm\:ss"));
 
-        return (Math.Round(requiredPaceMinPerKm, 2), Math.Round(leaderDistanceKm, 2));
+        return (Math.Round(requiredPaceMinPerKm, 2), Math.Round(leaderDistanceKm, 2), isLive);
     }
 
     private double GetTotalDistance(string raceName)

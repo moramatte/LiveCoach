@@ -21,7 +21,7 @@ public interface ILiveScraper
     /// Tries Browserless first if BROWSERLESS_TOKEN is set, falls back to Playwright if needed.
     /// Tries AI analysis, falls back to regex parsing.
     /// </summary>
-    Task<LeaderData?> GetLeaderDataWithScraperAsync(string url, int timeoutMs = 30000);
+    Task<LeaderData?> GetLeaderDataWithScraperAsync(string url, int timeoutMs = 60000);
     
     /// <summary>
     /// Uses AI (Groq) to analyze HTML content and extract leader data.

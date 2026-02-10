@@ -1,4 +1,5 @@
 using Microsoft.Playwright;
+using Microsoft.Extensions.Logging;
 using System.Diagnostics;
 using System.Globalization;
 using System.Reflection;
@@ -12,24 +13,26 @@ public class LiveScraper : ILiveScraper
 {
     private readonly HttpClient _httpClient;
     private readonly string? _groqApiKey;
-    
+    private readonly ILogger<LiveScraper>? _logger;
+
     private static readonly Dictionary<string, (LeaderData? Data, DateTime Timestamp)> _cache = new();
     private static readonly object _cacheLock = new object();
     private static readonly TimeSpan _cacheTTL = TimeSpan.FromSeconds(30);
 
-    public LiveScraper(HttpClient httpClient, string? groqApiKey = null)
+    public LiveScraper(HttpClient httpClient, ILogger<LiveScraper>? logger = null, string? groqApiKey = null)
     {
         _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
+        _logger = logger;
         _groqApiKey = groqApiKey ?? Environment.GetEnvironmentVariable("GROQ_API_KEY");
     }
 
-    public LiveScraper() : this(new HttpClient()) { }
+    public LiveScraper() : this(new HttpClient(), null) { }
 
     public async Task<LeaderData?> GetLeaderDataAsync(string url)
     {
         if (TryGetFromCache(url, out var cachedData))
         {
-            Console.WriteLine($"[Cache HIT] Returning cached data for {url}");
+            _logger?.LogInformation("[Cache HIT] Returning cached data for {Url}", url);
             return cachedData;
         }
         
@@ -42,8 +45,8 @@ public class LiveScraper : ILiveScraper
             {
                 try
                 {
-                    Console.WriteLine($"[GetLeaderDataAsync] Trying Browserless for {url}");
-                    var result = await GetLeaderDataWithBrowserlessOrPlaywrightAsync(url, browserlessToken, 30000).ConfigureAwait(false);
+                    _logger?.LogInformation("[GetLeaderDataAsync] Trying Browserless for {Url}", url);
+                    var result = await GetLeaderDataWithBrowserlessOrPlaywrightAsync(url, browserlessToken, 60000).ConfigureAwait(false);
                     if (result != null)
                     {
                         AddToCache(url, result);
@@ -52,22 +55,22 @@ public class LiveScraper : ILiveScraper
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[Browserless error]: {ex.Message}. Falling back to Playwright...");
+                    _logger?.LogWarning(ex, "[Browserless error]: {Message}. Falling back to Playwright...", ex.Message);
                 }
             }
 
-            // Fall back to Playwright for JavaScript rendering
-            Console.WriteLine($"[GetLeaderDataAsync] Using Playwright for {url}");
-            var playwrightResult = await GetLeaderDataWithScraperAsync(url, 30000).ConfigureAwait(false);
-            if (playwrightResult != null)
-            {
-                AddToCache(url, playwrightResult);
+                // Fall back to Playwright for JavaScript rendering
+                _logger?.LogInformation("[GetLeaderDataAsync] Using Playwright for {Url}", url);
+                var playwrightResult = await GetLeaderDataWithScraperAsync(url, 60000).ConfigureAwait(false);
+                if (playwrightResult != null)
+                {
+                    AddToCache(url, playwrightResult);
+                }
+                return playwrightResult;
             }
-            return playwrightResult;
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"[GetLeaderDataAsync error]: {ex.Message}");
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "[GetLeaderDataAsync error]: {Message}", ex.Message);
             return null;
         }
     }
@@ -76,27 +79,27 @@ public class LiveScraper : ILiveScraper
     {
         try
         {
-            var htmlContent = await GetRenderedHtmlViaBrowserlessAsync(url, browserlessToken, timeoutMs).ConfigureAwait(false);
-            if (!string.IsNullOrWhiteSpace(htmlContent))
-            {
-                Console.WriteLine($"[Browserless] Successfully rendered HTML for {url}");
-                var result = await AnalyzeWithAgentAsync(htmlContent).ConfigureAwait(false);
-                return result;
+                var htmlContent = await GetRenderedHtmlViaBrowserlessAsync(url, browserlessToken, timeoutMs).ConfigureAwait(false);
+                if (!string.IsNullOrWhiteSpace(htmlContent))
+                {
+                    _logger?.LogInformation("[Browserless] Successfully rendered HTML for {Url}", url);
+                    var result = await AnalyzeWithAgentAsync(htmlContent).ConfigureAwait(false);
+                    return result;
+                }
+                return null;
             }
-            return null;
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"[GetLeaderDataWithBrowserlessOrPlaywrightAsync error]: {ex.Message}");
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "[GetLeaderDataWithBrowserlessOrPlaywrightAsync error]: {Message}", ex.Message);
             throw;
         }
     }
 
-    public async Task<LeaderData?> GetLeaderDataWithScraperAsync(string url, int timeoutMs = 30000)
+    public async Task<LeaderData?> GetLeaderDataWithScraperAsync(string url, int timeoutMs = 60000)
     {
         if (TryGetFromCache(url, out var cachedData))
         {
-            Console.WriteLine($"[Cache HIT] Returning cached data for {url}");
+            _logger?.LogInformation("[Cache HIT] Returning cached data for {Url}", url);
             return cachedData;
         }
 
@@ -105,8 +108,8 @@ public class LiveScraper : ILiveScraper
             var browserlessToken = Environment.GetEnvironmentVariable("BROWSERLESS_TOKEN");
             var groqApiKey = Environment.GetEnvironmentVariable("GROQ_API_KEY");
 
-            Console.WriteLine($"[GetLeaderDataWithScraperAsync] BROWSERLESS_TOKEN present: {!string.IsNullOrWhiteSpace(browserlessToken)}");
-            Console.WriteLine($"[GetLeaderDataWithScraperAsync] GROQ_API_KEY present: {!string.IsNullOrWhiteSpace(groqApiKey)}");
+            _logger?.LogInformation("[GetLeaderDataWithScraperAsync] BROWSERLESS_TOKEN present: {HasToken}, GROQ_API_KEY present: {HasKey}", 
+                !string.IsNullOrWhiteSpace(browserlessToken), !string.IsNullOrWhiteSpace(groqApiKey));
 
             string? htmlContent = null;
             string renderMethod = "unknown";
@@ -117,14 +120,14 @@ public class LiveScraper : ILiveScraper
             {
                 try
                 {
-                    Console.WriteLine($"[ScraperService] Using scraper service at {scraperServiceUrl}");
+                    _logger?.LogInformation("[ScraperService] Using scraper service at {ServiceUrl}", scraperServiceUrl);
                     htmlContent = await GetRenderedHtmlViaScraperServiceAsync(url, scraperServiceUrl, timeoutMs).ConfigureAwait(false);
                     renderMethod = "ScraperService";
-                    Console.WriteLine($"[ScraperService] Successfully rendered HTML ({htmlContent?.Length ?? 0} chars)");
+                    _logger?.LogInformation("[ScraperService] Successfully rendered HTML ({Length} chars)", htmlContent?.Length ?? 0);
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ScraperService] Failed: {ex.Message}. Will try Browserless or Playwright...");
+                    _logger?.LogWarning(ex, "[ScraperService] Failed: {Message}. Will try Browserless or Playwright...", ex.Message);
                     htmlContent = null;
                 }
             }
@@ -134,14 +137,14 @@ public class LiveScraper : ILiveScraper
             {
                 try
                 {
-                    Console.WriteLine($"[Browserless] Attempting to fetch {url}");
+                    _logger?.LogInformation("[Browserless] Attempting to fetch {Url}", url);
                     htmlContent = await GetRenderedHtmlViaBrowserlessAsync(url, browserlessToken, timeoutMs).ConfigureAwait(false);
                     renderMethod = "Browserless";
-                    Console.WriteLine($"[Browserless] Successfully rendered HTML ({htmlContent?.Length ?? 0} chars)");
+                    _logger?.LogInformation("[Browserless] Successfully rendered HTML ({Length} chars)", htmlContent?.Length ?? 0);
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[Browserless] Failed: {ex.Message}. Will try Playwright...");
+                    _logger?.LogWarning(ex, "[Browserless] Failed: {Message}. Will try Playwright...", ex.Message);
                     htmlContent = null;
                 }
             }
@@ -149,7 +152,7 @@ public class LiveScraper : ILiveScraper
             // Try Playwright as last resort
             if (htmlContent == null)
             {
-                Console.WriteLine($"[Playwright] Attempting fallback for {url}");
+                _logger?.LogInformation("[Playwright] Attempting fallback for {Url}", url);
                 await EnsurePlaywrightBrowsersInstalledAsync().ConfigureAwait(false);
                 using var playwright = await Playwright.CreateAsync().ConfigureAwait(false);
                 await using var browser = await playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions { Headless = true }).ConfigureAwait(false);
@@ -159,60 +162,55 @@ public class LiveScraper : ILiveScraper
                 await page.GotoAsync(url, new PageGotoOptions { WaitUntil = WaitUntilState.NetworkIdle }).ConfigureAwait(false);
                 htmlContent = await page.ContentAsync().ConfigureAwait(false);
                 renderMethod = "Playwright";
-                Console.WriteLine($"[Playwright] Successfully fetched HTML ({htmlContent.Length} chars)");
+                _logger?.LogInformation("[Playwright] Successfully fetched HTML ({Length} chars)", htmlContent.Length);
             }
 
             // Now analyze the HTML with AI
             if (string.IsNullOrWhiteSpace(htmlContent))
             {
-                Console.WriteLine($"[ERROR] All rendering methods failed to produce HTML content");
+                _logger?.LogError("[ERROR] All rendering methods failed to produce HTML content");
                 return null;
             }
 
-            Console.WriteLine($"[{renderMethod}] Analyzing HTML with AI...");
+            _logger?.LogInformation("[{RenderMethod}] Analyzing HTML with AI...", renderMethod);
             var result = await AnalyzeWithAgentAsync(htmlContent).ConfigureAwait(false);
 
             if (result != null)
             {
-                Console.WriteLine($"[{renderMethod}] AI extraction succeeded: {result.DistanceKm} km, Time: {result.ElapsedTime}");
+                _logger?.LogInformation("[{RenderMethod}] AI extraction succeeded: {Distance} km, Time: {Time}", renderMethod, result.DistanceKm, result.ElapsedTime);
                 AddToCache(url, result);
             }
             else
             {
-                Console.WriteLine($"[{renderMethod}] AI extraction returned null. HTML was retrieved successfully but AI could not extract race data.");
-                Console.WriteLine($"[{renderMethod}] This likely means:");
-                Console.WriteLine($"  1. The race page format has changed");
-                Console.WriteLine($"  2. The race has not started yet (no leader data available)");
-                Console.WriteLine($"  3. The AI model failed to parse the data");
-                Console.WriteLine($"  4. GROQ_API_KEY may be invalid or out of credits");
+                _logger?.LogWarning("[{RenderMethod}] AI extraction returned null. HTML was retrieved successfully but AI could not extract race data. " +
+                    "This likely means: 1) Race page format changed, 2) Race not started yet, 3) AI model failed to parse, 4) GROQ_API_KEY invalid/out of credits", renderMethod);
             }
 
-                    return result;
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"[GetLeaderDataWithScraperAsync error]: {ex.Message}");
-                    Console.WriteLine($"[GetLeaderDataWithScraperAsync stack]: {ex.StackTrace}");
-                    return null;
-                }
+                return result;
             }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "[GetLeaderDataWithScraperAsync error]: {Message}", ex.Message);
+            return null;
+        }
+    }
 
-            public async Task<LeaderData?> AnalyzeWithAgentAsync(string content)
+    public async Task<LeaderData?> AnalyzeWithAgentAsync(string content)
     {
         if (string.IsNullOrWhiteSpace(_groqApiKey))
         {
-            Console.WriteLine("[AnalyzeWithAgent]: No GROQ_API_KEY found - cannot extract data with AI");
+            _logger?.LogWarning("[AnalyzeWithAgent]: No GROQ_API_KEY found - cannot extract data with AI");
             return null;
         }
 
         try
         {
             var extractedData = ExtractRaceData(content);
-            Console.WriteLine($"[Groq] Processing {extractedData.Length} chars of extracted race data");
+            _logger?.LogInformation("[Groq] Processing {Length} chars of extracted race data", extractedData.Length);
 
             // Log a sample of what we're sending to the AI
             var sample = extractedData.Length > 500 ? extractedData.Substring(0, 500) + "..." : extractedData;
-            Console.WriteLine($"[Groq] Sample data being sent to AI:\n{sample}");
+            _logger?.LogDebug("[Groq] Sample data being sent to AI: {Sample}", sample);
 
             var requestBody = new
             {
@@ -255,15 +253,15 @@ public class LiveScraper : ILiveScraper
 
             if (!response.IsSuccessStatusCode)
             {
-                Console.WriteLine($"[Groq API error {response.StatusCode}]: {responseBody}");
+                _logger?.LogError("[Groq API error {StatusCode}]: {ResponseBody}", response.StatusCode, responseBody);
 
                 if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
                 {
-                    Console.WriteLine($"[Groq] Authentication failed - GROQ_API_KEY may be invalid");
+                    _logger?.LogWarning("[Groq] Authentication failed - GROQ_API_KEY may be invalid");
                 }
                 else if ((int)response.StatusCode == 429)
                 {
-                    Console.WriteLine($"[Groq] Rate limit exceeded or out of credits");
+                    _logger?.LogWarning("[Groq] Rate limit exceeded or out of credits");
                 }
 
                 return null;
@@ -271,45 +269,44 @@ public class LiveScraper : ILiveScraper
 
             var jsonResponse = JsonSerializer.Deserialize<JsonElement>(responseBody);
             var aiResult = jsonResponse.GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString();
-            Console.WriteLine($"[AI Response]: {aiResult}");
+            _logger?.LogInformation("[AI Response]: {AIResult}", aiResult);
 
             // DIAGNOSTIC: Log the extracted data sent to AI
-            Console.WriteLine($"[DIAGNOSTIC] Extracted data sent to Groq ({extractedData.Length} chars):");
-            Console.WriteLine(extractedData.Length > 1000 ? extractedData.Substring(0, 1000) + "..." : extractedData);
+            var extractedSample = extractedData.Length > 1000 ? extractedData.Substring(0, 1000) + "..." : extractedData;
+            _logger?.LogDebug("[DIAGNOSTIC] Extracted data sent to Groq ({Length} chars): {Sample}", extractedData.Length, extractedSample);
 
             var parsed = ParseAIResponse(aiResult);
             if (parsed == null)
             {
-                Console.WriteLine($"[DIAGNOSTIC] ParseAIResponse returned NULL for AI result: '{aiResult}'");
-                Console.WriteLine($"[DIAGNOSTIC] This means the AI could not extract valid distance/time from the HTML");
+                _logger?.LogWarning("[DIAGNOSTIC] ParseAIResponse returned NULL for AI result: '{AIResult}'. This means the AI could not extract valid distance/time from the HTML", aiResult);
             }
             else
             {
-                Console.WriteLine($"[SUCCESS] Parsed leader data: {parsed.DistanceKm} km, Time: {parsed.ElapsedTime}");
+                _logger?.LogInformation("[SUCCESS] Parsed leader data: {Distance} km, Time: {Time}", parsed.DistanceKm, parsed.ElapsedTime);
             }
 
-            return parsed;
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"[AnalyzeWithAgent error]: {ex.Message}");
+                return parsed;
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "[AnalyzeWithAgent error]: {Message}", ex.Message);
             return null;
         }
     }
 
-    private static string ExtractRaceData(string html)
+    private string ExtractRaceData(string html)
     {
         if (string.IsNullOrWhiteSpace(html))
             return string.Empty;
 
         var sections = new List<string>();
-        
+
         // Provider detection
         string provider = html.Contains("live.skiklasserna.se") || html.Contains("skiclassics") ? "SkiClassics"
                         : html.Contains("live.eqtiming.com") || html.Contains("eqtiming") ? "EQTiming"
                         : "Unknown";
-        
-        Console.WriteLine($"[Provider] Detected: {provider}");
+
+        _logger?.LogInformation("[Provider] Detected: {Provider}", provider);
         sections.Add($"PROVIDER: {provider}");
 
         // Extract page title for event context
@@ -317,7 +314,7 @@ public class LiveScraper : ILiveScraper
         if (titleMatch.Success)
         {
             sections.Add($"Page Title: {titleMatch.Groups[1].Value.Trim()}");
-            Console.WriteLine($"[Title] {titleMatch.Groups[1].Value.Trim()}");
+            _logger?.LogInformation("[Title] {Title}", titleMatch.Groups[1].Value.Trim());
         }
 
         // Provider-specific extraction
@@ -328,24 +325,24 @@ public class LiveScraper : ILiveScraper
             if (checkpointMatches.Count > 0)
             {
                 sections.Add($"\nCheckpoints ({checkpointMatches.Count} found):");
-                foreach (Match match in checkpointMatches)
-                {
-                    sections.Add($"  {match.Groups[1].Value} km | {match.Groups[2].Value.Trim()}");
+                    foreach (Match match in checkpointMatches)
+                    {
+                        sections.Add($"  {match.Groups[1].Value} km | {match.Groups[2].Value.Trim()}");
+                    }
+                    _logger?.LogInformation("[SkiClassics] Found {Count} checkpoints", checkpointMatches.Count);
                 }
-                Console.WriteLine($"[SkiClassics] Found {checkpointMatches.Count} checkpoints");
-            }
-            else
-            {
-                Console.WriteLine($"[SkiClassics] WARNING: No checkpoints found in h3/h4 headings");
-            }
-            
-            // Also look for active checkpoint marker
-            var activeMatch = Regex.Match(html, @"data-checkpoint-active=""true""[^>]*>.*?<h[34][^>]*>\s*([\d.,]+)\s*km", 
-                                         RegexOptions.IgnoreCase | RegexOptions.Singleline);
-            if (activeMatch.Success)
-            {
-                sections.Add($"\nActive Checkpoint: {activeMatch.Groups[1].Value} km");
-                Console.WriteLine($"[SkiClassics] Active checkpoint: {activeMatch.Groups[1].Value} km");
+                else
+                {
+                    _logger?.LogWarning("[SkiClassics] WARNING: No checkpoints found in h3/h4 headings");
+                }
+
+                // Also look for active checkpoint marker
+                var activeMatch = Regex.Match(html, @"data-checkpoint-active=""true""[^>]*>.*?<h[34][^>]*>\s*([\d.,]+)\s*km", 
+                                             RegexOptions.IgnoreCase | RegexOptions.Singleline);
+                if (activeMatch.Success)
+                {
+                    sections.Add($"\nActive Checkpoint: {activeMatch.Groups[1].Value} km");
+                    _logger?.LogInformation("[SkiClassics] Active checkpoint: {Distance} km", activeMatch.Groups[1].Value);
             }
         }
         else if (provider == "EQTiming")
@@ -364,7 +361,7 @@ public class LiveScraper : ILiveScraper
                 {
                     sections.Add($"  {dist}");
                 }
-                Console.WriteLine($"[EQTiming] Found {distances.Count} unique race distances");
+                _logger?.LogInformation("[EQTiming] Found {Count} unique race distances", distances.Count);
             }
             
             // Extract Point column values (current checkpoint positions, including "Mål")
@@ -375,22 +372,22 @@ public class LiveScraper : ILiveScraper
                 var pointValues = new List<string>();
                 for (int i = 0; i < Math.Min(10, pointMatches.Count); i++)
                 {
-                    var value = pointMatches[i].Groups[1].Value.Trim();
-                    pointValues.Add(value);
-                    sections.Add($"  {i + 1}. {value}");
-                }
-                Console.WriteLine($"[EQTiming] Found {pointMatches.Count} Point column values, showing first 10");
-                
-                // If we see "Mål" (Finish), note it
-                if (pointValues.Any(v => v.Contains("Mål") || v.Contains("mal")))
-                {
-                    sections.Add($"\n[Note: 'Mål' (Finish) detected - leader has finished race]");
-                    Console.WriteLine($"[EQTiming] Detected 'Mål' (Finish) in Point column");
-                }
-            }
-            else
-            {
-                Console.WriteLine($"[EQTiming] WARNING: No Point column values found");
+                            var value = pointMatches[i].Groups[1].Value.Trim();
+                            pointValues.Add(value);
+                            sections.Add($"  {i + 1}. {value}");
+                        }
+                        _logger?.LogInformation("[EQTiming] Found {Count} Point column values, showing first 10", pointMatches.Count);
+
+                        // If we see "Mål" (Finish), note it
+                        if (pointValues.Any(v => v.Contains("Mål") || v.Contains("mal")))
+                        {
+                            sections.Add($"\n[Note: 'Mål' (Finish) detected - leader has finished race]");
+                            _logger?.LogInformation("[EQTiming] Detected 'Mål' (Finish) in Point column");
+                        }
+                    }
+                    else
+                    {
+                        _logger?.LogWarning("[EQTiming] WARNING: No Point column values found");
             }
         }
 
@@ -407,22 +404,22 @@ public class LiveScraper : ILiveScraper
         {
             tableMatch = Regex.Match(html, @"<table[^>]*(?:class=""[^""]*(?:live|result|timing)[^""]*"")[^>]*>.*?</table>", 
                                     RegexOptions.IgnoreCase | RegexOptions.Singleline);
-            Console.WriteLine($"[Table] Trying class-based pattern");
+            _logger?.LogDebug("[Table] Trying class-based pattern");
         }
-        
+
         // Pattern 3: If still no match, look for any table with tbody
         if (!tableMatch.Success)
         {
             tableMatch = Regex.Match(html, @"<table[^>]*>.*?<tbody>.*?</tbody>.*?</table>", 
                                     RegexOptions.IgnoreCase | RegexOptions.Singleline);
-            Console.WriteLine($"[Table] Trying tbody pattern");
+            _logger?.LogDebug("[Table] Trying tbody pattern");
         }
         
         if (tableMatch.Success)
         {
             var tableHtml = tableMatch.Value;
-            Console.WriteLine($"[Table] Found table with {tableHtml.Length} chars");
-            
+            _logger?.LogInformation("[Table] Found table with {Length} chars", tableHtml.Length);
+
             // Keep some HTML structure to help AI understand table layout
             // Extract table headers
             var headerMatch = Regex.Match(tableHtml, @"<thead>.*?</thead>", RegexOptions.IgnoreCase | RegexOptions.Singleline);
@@ -431,7 +428,7 @@ public class LiveScraper : ILiveScraper
                 var headerText = StripHtmlTags(headerMatch.Value);
                 sections.Add($"\nTABLE HEADERS:\n{headerText}");
             }
-            
+
             // Extract first 20 rows (leader + context)
             var rowMatches = Regex.Matches(tableHtml, @"<tr[^>]*>.*?</tr>", RegexOptions.IgnoreCase | RegexOptions.Singleline);
             if (rowMatches.Count > 0)
@@ -447,25 +444,25 @@ public class LiveScraper : ILiveScraper
                         sections.Add($"  Row {i + 1}: {rowText}");
                     }
                 }
-                Console.WriteLine($"[Table] Extracted {Math.Min(20, rowMatches.Count)} rows from {rowMatches.Count} total");
+                _logger?.LogInformation("[Table] Extracted {Count} rows from {Total} total", Math.Min(20, rowMatches.Count), rowMatches.Count);
+                }
             }
-        }
-        else
-        {
-            Console.WriteLine($"[Table] WARNING: No results table found with any pattern");
-        }
+            else
+            {
+                _logger?.LogWarning("[Table] WARNING: No results table found with any pattern");
+            }
 
-        var result = string.Join("\n", sections);
-        
-        // Truncate if still too large (stay under 20K for AI token limits)
-        if (result.Length > 20000)
-        {
-            result = result.Substring(0, 20000) + "\n... [truncated]";
-            Console.WriteLine($"[ExtractRaceData] Truncated output to 20K chars");
-        }
-        else
-        {
-            Console.WriteLine($"[ExtractRaceData] Output size: {result.Length} chars");
+            var result = string.Join("\n", sections);
+
+            // Truncate if still too large (stay under 20K for AI token limits)
+            if (result.Length > 20000)
+            {
+                result = result.Substring(0, 20000) + "\n... [truncated]";
+                _logger?.LogInformation("[ExtractRaceData] Truncated output to 20K chars");
+            }
+            else
+            {
+                _logger?.LogInformation("[ExtractRaceData] Output size: {Length} chars", result.Length);
         }
         
         return result;
@@ -515,7 +512,7 @@ public class LiveScraper : ILiveScraper
             };
 
             var json = JsonSerializer.Serialize(requestBody);
-            Console.WriteLine($"[Browserless] Calling /content API for {url}");
+            _logger?.LogInformation("[Browserless] Calling /content API for {Url}", url);
 
             using var request = new HttpRequestMessage(HttpMethod.Post, $"https://chrome.browserless.io/content?token={apiToken}")
             {
@@ -525,12 +522,12 @@ public class LiveScraper : ILiveScraper
             using var response = await _httpClient.SendAsync(request).ConfigureAwait(false);
             var responseBody = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
 
-            Console.WriteLine($"[Browserless] Response status: {response.StatusCode}");
+            _logger?.LogInformation("[Browserless] Response status: {StatusCode}", response.StatusCode);
 
             if (!response.IsSuccessStatusCode)
             {
                 var errorPreview = responseBody.Length > 200 ? responseBody.Substring(0, 200) + "..." : responseBody;
-                Console.WriteLine($"[Browserless] Error response: {errorPreview}");
+                _logger?.LogError("[Browserless] Error response: {Error}", errorPreview);
 
                 if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
                 {
@@ -546,15 +543,15 @@ public class LiveScraper : ILiveScraper
                     throw new Exception($"Browserless service error (likely temporary outage) - status {response.StatusCode}");
                 }
 
-                throw new Exception($"Browserless API failed with status {response.StatusCode}: {errorPreview}");
-            }
+                        throw new Exception($"Browserless API failed with status {response.StatusCode}: {errorPreview}");
+                    }
 
-            Console.WriteLine($"[Browserless] Success - received {responseBody.Length} chars");
-            return responseBody;
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"[Browserless] Exception: {ex.Message}");
+                    _logger?.LogInformation("[Browserless] Success - received {Length} chars", responseBody.Length);
+                    return responseBody;
+                }
+                catch (Exception ex)
+                {
+                    _logger?.LogError(ex, "[Browserless] Exception: {Message}", ex.Message);
             throw;
         }
     }
@@ -571,28 +568,27 @@ public class LiveScraper : ILiveScraper
 
             var json = JsonSerializer.Serialize(requestBody);
             var serviceEndpoint = $"{scraperServiceUrl.TrimEnd('/')}/render";
-            Console.WriteLine($"[ScraperService] Calling {serviceEndpoint} for {url}");
+            _logger?.LogInformation("[ScraperService] Calling {Endpoint} for {Url}", serviceEndpoint, url);
 
             // First, test if the service is reachable with a health check
             try
             {
                 var healthEndpoint = $"{scraperServiceUrl.TrimEnd('/')}/health";
-                Console.WriteLine($"[ScraperService] Testing health endpoint: {healthEndpoint}");
+                _logger?.LogDebug("[ScraperService] Testing health endpoint: {Endpoint}", healthEndpoint);
                 using var healthRequest = new HttpRequestMessage(HttpMethod.Get, healthEndpoint);
                 using var healthResponse = await _httpClient.SendAsync(healthRequest, HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false);
                 if (!healthResponse.IsSuccessStatusCode)
                 {
-                    Console.WriteLine($"[ScraperService] WARNING: Health check failed with status {healthResponse.StatusCode}");
+                    _logger?.LogWarning("[ScraperService] WARNING: Health check failed with status {StatusCode}", healthResponse.StatusCode);
                 }
                 else
                 {
-                    Console.WriteLine($"[ScraperService] Health check passed");
+                    _logger?.LogInformation("[ScraperService] Health check passed");
                 }
             }
             catch (HttpRequestException healthEx)
             {
-                Console.WriteLine($"[ScraperService] ERROR: Cannot reach scraper service at {scraperServiceUrl}");
-                Console.WriteLine($"[ScraperService] Health check error: {healthEx.Message}");
+                _logger?.LogError(healthEx, "[ScraperService] ERROR: Cannot reach scraper service at {Url}. Health check error: {Message}", scraperServiceUrl, healthEx.Message);
                 throw new Exception($"Scraper service is not reachable at {scraperServiceUrl}. Ensure the service is running. Error: {healthEx.Message}");
             }
 
@@ -606,12 +602,12 @@ public class LiveScraper : ILiveScraper
             using var response = await _httpClient.SendAsync(request).ConfigureAwait(false);
             var responseBody = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
 
-            Console.WriteLine($"[ScraperService] Response status: {response.StatusCode}");
+            _logger?.LogInformation("[ScraperService] Response status: {StatusCode}", response.StatusCode);
 
             if (!response.IsSuccessStatusCode)
             {
                 var errorPreview = responseBody.Length > 200 ? responseBody.Substring(0, 200) + "..." : responseBody;
-                Console.WriteLine($"[ScraperService] Error response: {errorPreview}");
+                _logger?.LogError("[ScraperService] Error response: {Error}", errorPreview);
                 throw new Exception($"Scraper service failed with status {response.StatusCode}: {errorPreview}");
             }
 
@@ -631,20 +627,18 @@ public class LiveScraper : ILiveScraper
                 ? durationProp.GetInt32() 
                 : 0;
 
-            Console.WriteLine($"[ScraperService] Success - received {html?.Length ?? 0} chars in {duration}ms");
+            _logger?.LogInformation("[ScraperService] Success - received {Length} chars in {Duration}ms", html?.Length ?? 0, duration);
 
-            return html ?? string.Empty;
-        }
-        catch (HttpRequestException httpEx)
-        {
-            Console.WriteLine($"[ScraperService] HTTP Exception: {httpEx.Message}");
-            Console.WriteLine($"[ScraperService] Stack trace: {httpEx.StackTrace}");
-            throw new Exception($"Failed to connect to scraper service at {scraperServiceUrl}: {httpEx.Message}. Ensure the service is running and accessible.", httpEx);
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"[ScraperService] Exception: {ex.Message}");
-            Console.WriteLine($"[ScraperService] Stack trace: {ex.StackTrace}");
+                return html ?? string.Empty;
+            }
+            catch (HttpRequestException httpEx)
+            {
+                _logger?.LogError(httpEx, "[ScraperService] HTTP Exception: {Message}. Failed to connect to scraper service at {Url}. Ensure the service is running and accessible.", httpEx.Message, scraperServiceUrl);
+                throw new Exception($"Failed to connect to scraper service at {scraperServiceUrl}: {httpEx.Message}. Ensure the service is running and accessible.", httpEx);
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "[ScraperService] Exception: {Message}", ex.Message);
             throw;
         }
     }

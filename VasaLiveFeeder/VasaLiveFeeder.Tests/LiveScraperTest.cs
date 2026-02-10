@@ -82,6 +82,17 @@ namespace VasaLiveFeeder.Tests
         }
 
         [TestMethod]
+        public async Task LiveDataIsScrapedFromSkiClassicsJurassienne()
+        {
+            var scraper = new LiveScraper.LiveScraper();
+            var data = await scraper.GetLeaderDataWithScraperAsync("https://skiclassics.com/live-center/?event=1304&season=2026&gender=men");
+
+            Assert.IsNotNull(data);
+            Assert.AreEqual(38, data.DistanceKm);
+            Assert.AreEqual(new TimeSpan(1, 26, 13), data.ElapsedTime);
+        }
+
+        [TestMethod]
         public async Task LiveDataIsScrapedFromSkiClassicsFinlandia()
         {
             var scraper = new LiveScraper.LiveScraper();
@@ -180,7 +191,7 @@ namespace VasaLiveFeeder.Tests
             }
 
             using var httpClient = new HttpClient();
-            var scraper = new VasaLiveFeeder.LiveScraper.LiveScraper(httpClient, groqApiKey);
+            var scraper = new VasaLiveFeeder.LiveScraper.LiveScraper(httpClient, null, groqApiKey);
             var result = await scraper.AnalyzeWithAgentAsync(htmlContent);
 
             Assert.IsNotNull(result, "Result should not be null");

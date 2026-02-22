@@ -271,8 +271,23 @@ public class Function1
         // Parse user's elapsed time (required parameter)
         var myElapsedTimeMinutes = double.Parse(elapsedTimeStr, NumberStyles.Float, CultureInfo.InvariantCulture);
 
+        // Validate elapsed time
+        if (myElapsedTimeMinutes <= 0 || double.IsNaN(myElapsedTimeMinutes) || double.IsInfinity(myElapsedTimeMinutes))
+        {
+            _logger.LogWarning("Invalid elapsed time: {ElapsedTime}. Must be greater than 0.", myElapsedTimeMinutes);
+            return (5.0, 0, false); // Return default pace if elapsed time is invalid
+        }
+
         // Get leader's current data (pass user's elapsed time for fallback simulation)
         var (leaderDistanceKm, leaderElapsedTime, isLive) = await GetLeaderDataAsync(raceName, dryRun, myElapsedTimeMinutes);
+
+        // Validate leader data
+        if (leaderDistanceKm <= 0 || leaderElapsedTime.TotalMinutes <= 0)
+        {
+            _logger.LogWarning("Leader has not started yet or invalid leader data. Distance: {Distance} km, Time: {Time}", 
+                leaderDistanceKm, leaderElapsedTime);
+            return (5.0, 0, false); // Return default pace if leader hasn't started
+        }
 
         // Calculate target finishing time (leader's time + 50%)
         TimeSpan targetFinishTime;

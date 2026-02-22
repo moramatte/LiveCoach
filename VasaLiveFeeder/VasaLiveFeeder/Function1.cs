@@ -188,24 +188,21 @@ public class Function1
     {
         if (dryRun)
         {
-            // Dry run mode: Simulate a race starting every 30 minutes (resets at :00 and :30)
+            // Dry run mode: Simulate leader based on user's elapsed time
             // Leader pace: 2:18 min/km (2 minutes 18 seconds per km) = 26.09 km/h
             const double leaderPaceMinPerKm = 2.3; // 2.3 minutes = 2 min 18 sec
 
-            var now = DateTime.UtcNow;
-            var minutesSinceLast30 = now.Minute % 30 + (now.Second / 60.0);
-            var raceTimeMinutes = minutesSinceLast30;
-            var leaderDistanceKm = raceTimeMinutes / leaderPaceMinPerKm;
-            var leaderElapsedTime = TimeSpan.FromMinutes(raceTimeMinutes);
+            var leaderDistanceKm = userElapsedTimeMinutes / leaderPaceMinPerKm;
+            var leaderElapsedTime = TimeSpan.FromMinutes(userElapsedTimeMinutes);
 
-            _logger.LogInformation("DRY RUN: Current time {Time}, minutes since last 30-min mark: {Minutes}, leader at {Distance} km (pace: 2:18 min/km)", 
-                now.ToString("HH:mm:ss"), raceTimeMinutes, leaderDistanceKm);
+            _logger.LogInformation("DRY RUN: Using user's elapsed time ({Elapsed} min) to simulate leader at {Distance} km (pace: 2:18 min/km)",
+                userElapsedTimeMinutes, leaderDistanceKm);
 
-                return (leaderDistanceKm, leaderElapsedTime, false); // dryRun mode: not live
-            }
+            return (leaderDistanceKm, leaderElapsedTime, false); // dryRun mode: not live
+        }
 
-            // Create scraper with logger for Application Insights integration
-            var loggerFactory = LoggerFactory.Create(builder => builder.AddApplicationInsights());
+        // Create scraper with logger for Application Insights integration
+        var loggerFactory = LoggerFactory.Create(builder => builder.AddApplicationInsights());
             var scraperLogger = loggerFactory.CreateLogger<LiveScraper.LiveScraper>();
             var scraper = new LiveScraper.LiveScraper(new HttpClient(), scraperLogger);
             var url = GetRaceUrl(raceName);
@@ -251,20 +248,20 @@ public class Function1
             var leaderDistanceKm = userElapsedTimeMinutes / leaderPaceMinPerKm;
             var leaderElapsedTime = TimeSpan.FromMinutes(userElapsedTimeMinutes);
 
-                    _logger.LogInformation("FALLBACK MODE: Using user's elapsed time ({UserElapsed} min) to simulate leader at {Distance} km (pace: 2:18 min/km)", 
-                        userElapsedTimeMinutes, leaderDistanceKm);
+            _logger.LogInformation("FALLBACK MODE: Using user's elapsed time ({UserElapsed} min) to simulate leader at {Distance} km (pace: 2:18 min/km)",
+                userElapsedTimeMinutes, leaderDistanceKm);
 
-                    return (leaderDistanceKm, leaderElapsedTime, false); // fallback mode: not live
-                }
+            return (leaderDistanceKm, leaderElapsedTime, false); // fallback mode: not live
+        }
 
-                _logger.LogInformation("Successfully scraped leader data: {Distance} km, Time: {Time}", 
-                    leaderData.DistanceKm, leaderData.ElapsedTime);
+        _logger.LogInformation("Successfully scraped leader data: {Distance} km, Time: {Time}",
+            leaderData.DistanceKm, leaderData.ElapsedTime);
 
-                // Convert nullable TimeSpan to non-nullable (use distance/2.3 pace if time is missing)
-                var leaderTime = leaderData.ElapsedTime ?? TimeSpan.FromMinutes(leaderData.DistanceKm * 2.3);
+        // Convert nullable TimeSpan to non-nullable (use distance/2.3 pace if time is missing)
+        var leaderTime = leaderData.ElapsedTime ?? TimeSpan.FromMinutes(leaderData.DistanceKm * 2.3);
 
-                return (leaderData.DistanceKm, leaderTime, true); // successfully scraped: live data
-            }
+        return (leaderData.DistanceKm, leaderTime, true); // successfully scraped: live data
+    }
 
     public async Task<(double requiredPaceMinPerKm, double leaderDistanceKm, bool isLive)> DeriveTempoDelta(string raceName, string myProgressStr, string elapsedTimeStr, string currentSpeedStr, bool dryRun = false)
     {
@@ -347,6 +344,7 @@ public class Function1
             "finlandia" => 42.0,
             "test10k" => 10.0,
             "test20k" => 20.0,
+            "zelta" => 50.0,
             "craft ski marathon" => 42.0,
             "sya" => 40.0,
             "k-byggslingan" => 40.0,
@@ -369,6 +367,7 @@ public class Function1
             "ladiagonela" => "https://skiclassics.com/live-center/?event=9620&season=2026&gender=men",
             "test10k" => "_",
             "test20k" => "_",
+            "zelta" => "https://skiclassics.com/live-center/?event=8338&season=2026&gender=men",
             _ => throw new Exception($"No race url defined for {raceName}")
         };
 

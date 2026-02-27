@@ -17,10 +17,25 @@ namespace VasaLiveFeeder;
 public class Function1
 {
     private readonly ILogger<Function1> _logger;
+    private static readonly HttpClient _httpClient = new HttpClient
+    {
+        Timeout = TimeSpan.FromSeconds(30)
+    };
 
     public Function1(ILogger<Function1> logger)
     {
         _logger = logger;
+    }
+
+    [Function("Health")]
+    public async Task<HttpResponseData> Health([HttpTrigger(AuthorizationLevel.Anonymous, "get")] HttpRequestData req)
+    {
+        // Lightweight health check to keep function warm
+        var response = req.CreateResponse(HttpStatusCode.OK);
+        response.Headers.Add("Content-Type", "text/plain");
+        response.Headers.Add("Access-Control-Allow-Origin", "*");
+        await response.WriteStringAsync("OK");
+        return response;
     }
 
     [Function("TempoDelta")]
@@ -162,7 +177,7 @@ public class Function1
         bool live;
         try
         {
-            var (pace, leaderDistance, isLive) = await DeriveTempoDelta(raceName, progressStr, elapsedTimeStr, currentSpeedStr, dryRun);
+            var (pace, leaderDistance, isLive) = await DeriveTempoDelta(raceName, progressStr, elapsedTimeStr, dryRun);
             newSpeed = pace; // pace in min/km
             leaderDistanceKm = leaderDistance;
             live = isLive;
@@ -179,7 +194,10 @@ public class Function1
             Log.Error(GetType(), "Derived new speed is infinity or NaN");
             newSpeed = 0.1;
         }
-        var result = new { newSpeed = newSpeed, leaderDistanceKm = leaderDistanceKm, live = live };
+
+        // Convert pace from decimal minutes to M:SS format
+        var paceFormatted = FormatPaceAsMinutesSeconds(newSpeed);
+        var result = new { newSpeed = paceFormatted, leaderDistanceKm = leaderDistanceKm, live = live };
 
         return await CreateJsonResponse(req, result, HttpStatusCode.OK);
     }
@@ -203,11 +221,11 @@ public class Function1
 
         // Create scraper with logger for Application Insights integration
         var loggerFactory = LoggerFactory.Create(builder => builder.AddApplicationInsights());
-            var scraperLogger = loggerFactory.CreateLogger<LiveScraper.LiveScraper>();
-            var scraper = new LiveScraper.LiveScraper(new HttpClient(), scraperLogger);
-            var url = GetRaceUrl(raceName);
+        var scraperLogger = loggerFactory.CreateLogger<LiveScraper.LiveScraper>();
+        var scraper = new LiveScraper.LiveScraper(_httpClient, scraperLogger);
+        var url = GetRaceUrl(raceName);
 
-            _logger.LogInformation("Attempting to scrape race URL: {Url}", url);
+        _logger.LogInformation("Attempting to scrape race URL: {Url}", url);
 
         // Log and validate configuration
         var scraperServiceUrl = Environment.GetEnvironmentVariable("SCRAPER_SERVICE_URL");
@@ -263,23 +281,27 @@ public class Function1
         return (leaderData.DistanceKm, leaderTime, true); // successfully scraped: live data
     }
 
-    public async Task<(double requiredPaceMinPerKm, double leaderDistanceKm, bool isLive)> DeriveTempoDelta(string raceName, string myProgressStr, string elapsedTimeStr, string currentSpeedStr, bool dryRun = false)
+    public async Task<(double requiredPaceMinPerKm, double leaderDistanceKm, bool isLive)> DeriveTempoDelta(string raceName, string myProgressStr, string elapsedTimeStr, bool dryRun = false)
     {
         var myProgress = double.Parse(myProgressStr, CultureInfo.InvariantCulture);
         var totalDistance = GetTotalDistance(raceName);
 
         // Parse user's elapsed time (required parameter)
         var myElapsedTimeMinutes = double.Parse(elapsedTimeStr, NumberStyles.Float, CultureInfo.InvariantCulture);
+     
+        _logger.LogWarning("[DEVICE_PARAMS] race={Race}, km={Km}, elapsed={Elapsed}, dryRun={DryRun}", raceName, myProgressStr, elapsedTimeStr, dryRun);
 
-        // Validate elapsed time
-        if (myElapsedTimeMinutes <= 0 || double.IsNaN(myElapsedTimeMinutes) || double.IsInfinity(myElapsedTimeMinutes))
-        {
-            _logger.LogWarning("Invalid elapsed time: {ElapsedTime}. Must be greater than 0.", myElapsedTimeMinutes);
-            return (5.0, 0, false); // Return default pace if elapsed time is invalid
-        }
-
-        // Get leader's current data (pass user's elapsed time for fallback simulation)
+      
         var (leaderDistanceKm, leaderElapsedTime, isLive) = await GetLeaderDataAsync(raceName, dryRun, myElapsedTimeMinutes);
+
+        // Validate elapsed time - must be non-negative and realistic
+        if (myElapsedTimeMinutes < 0 || double.IsNaN(myElapsedTimeMinutes) || double.IsInfinity(myElapsedTimeMinutes))
+        {
+            _logger.LogWarning("Invalid elapsed time: {ElapsedTime}. Must be >= 0. Returning default pace with live leader data.", 
+                myElapsedTimeMinutes);
+            // Return default pace but include actual leader distance and live status
+            return (5.0, leaderDistanceKm, isLive);
+        }
 
         // Validate leader data
         if (leaderDistanceKm <= 0 || leaderElapsedTime.TotalMinutes <= 0)
@@ -324,18 +346,22 @@ public class Function1
             return (0, leaderDistanceKm, isLive);
         }
 
-        // Calculate required pace from remaining time and distance
-        var currentPace = myProgress > 0 ? myElapsedTimeMinutes / myProgress : 0;
-        _logger.LogInformation("Using elapsed time: {ElapsedTime} ({Pace:F2} min/km pace)",
-            TimeSpan.FromMinutes(myElapsedTimeMinutes).ToString(@"hh\:mm\:ss"), currentPace);
-
+        // Calculate time remaining and required pace (works for km=0 and km>0)
         var actualTimeRemaining = Math.Max(0, targetFinishTime.TotalMinutes - myElapsedTimeMinutes);
         var requiredPaceMinPerKm = actualTimeRemaining / distanceRemaining;
 
+        // Calculate current pace for logging (if user has moved)
+        var currentPace = myProgress > 0 ? myElapsedTimeMinutes / myProgress : 0;
+
         if (double.IsInfinity(requiredPaceMinPerKm) || double.IsNaN(requiredPaceMinPerKm) || requiredPaceMinPerKm <= 0)
         {
-            requiredPaceMinPerKm = myProgress > 0 ? myElapsedTimeMinutes / myProgress : 5.0;
+            requiredPaceMinPerKm = currentPace > 0 ? currentPace : 5.0;
         }
+
+        _logger.LogInformation(
+            "Progress: {Progress} km / {Total} km. Elapsed: {Elapsed}. Current pace: {CurrentPace:F2} min/km. Required pace: {RequiredPace:F2} min/km. Time remaining: {TimeRemaining}",
+            myProgress, totalDistance, TimeSpan.FromMinutes(myElapsedTimeMinutes).ToString(@"hh\:mm\:ss"),
+            currentPace, requiredPaceMinPerKm, TimeSpan.FromMinutes(actualTimeRemaining).ToString(@"hh\:mm\:ss"));
 
         _logger.LogInformation("Progress: {Progress} km / {Total} km. Elapsed: {Elapsed}. Required pace: {RequiredPace:F2} min/km. Time remaining: {TimeRemaining}",
             myProgress, totalDistance, TimeSpan.FromMinutes(myElapsedTimeMinutes).ToString(@"hh\:mm\:ss"),
@@ -349,10 +375,6 @@ public class Function1
         return raceName.ToLower() switch
         {
             "vasaloppet" => 90.0,
-            "vasaloppet 90" => 90.0,
-            "vasaloppet 45" => 45,
-            "vasaloppet 30" => 30,
-            "vasaloppet 10" => 10.0,
             "halvvasan" => 45,
             "ladiagonela" => 47.0,
             "craft" => 42.0,
@@ -371,8 +393,7 @@ public class Function1
     {
         var raceBaseUrl =  raceName.ToLower() switch
         {
-            "vasaloppet" => "https://live.eqtiming.com/76514",
-            "vasaloppet 90" => "https://live.eqtiming.com/76514",
+            "vasaloppet" => "https://skiclassics.com/live-center/?event=1264&season=2026&gender=men",
             "moraloppet" => "https://live.eqtiming.com/76514",
             "mora" => "https://live.eqtiming.com/76514",
             "mora25" => "https://live.eqtiming.com/73153",
@@ -394,10 +415,31 @@ public class Function1
         return  raceBaseUrl;
     }
 
+    private static string FormatPaceAsMinutesSeconds(double paceMinPerKm)
+    {
+        var minutes = (int)paceMinPerKm;
+        var seconds = (int)Math.Round((paceMinPerKm - minutes) * 60);
+
+        // Handle edge case where rounding causes 60 seconds
+        if (seconds >= 60)
+        {
+            minutes += 1;
+            seconds = 0;
+        }
+
+        return $"{minutes}:{seconds:D2}";
+    }
+
     private static async Task<HttpResponseData> CreateJsonResponse(HttpRequestData req, object value, HttpStatusCode status)
     {
         var resp = req.CreateResponse(status);
         resp.Headers.Add("Content-Type", "application/json; charset=utf-8");
+        resp.Headers.Add("Access-Control-Allow-Origin", "*");
+        resp.Headers.Add("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+        resp.Headers.Add("Access-Control-Allow-Headers", "Content-Type");
+        resp.Headers.Add("Connection", "keep-alive");
+        resp.Headers.Add("Keep-Alive", "timeout=60, max=100");
+
         var options = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
         var json = JsonSerializer.Serialize(value, options);
         var bytes = Encoding.UTF8.GetBytes(json);

@@ -17,7 +17,7 @@ public class LiveScraper : ILiveScraper
 
     private static readonly Dictionary<string, (LeaderData? Data, DateTime Timestamp)> _cache = new();
     private static readonly object _cacheLock = new object();
-    private static readonly TimeSpan _cacheTTL = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan _cacheTTL = TimeSpan.FromMinutes(2);
 
     public LiveScraper(HttpClient httpClient, ILogger<LiveScraper>? logger = null, string? groqApiKey = null)
     {
@@ -30,12 +30,14 @@ public class LiveScraper : ILiveScraper
 
     public async Task<LeaderData?> GetLeaderDataAsync(string url)
     {
-        if (TryGetFromCache(url, out var cachedData))
+        var cacheKey = GetCacheKey(url);
+
+        if (TryGetFromCache(cacheKey, out var cachedData))
         {
-            _logger?.LogInformation("[Cache HIT] Returning cached data for {Url}", url);
+            _logger?.LogInformation("[Cache HIT] Returning cached data for {Url} (key: {CacheKey})", url, cacheKey);
             return cachedData;
         }
-        
+
         try
         {
             // For SkiClassics and EQTiming, we need JavaScript rendering
@@ -49,7 +51,7 @@ public class LiveScraper : ILiveScraper
                     var result = await GetLeaderDataWithBrowserlessOrPlaywrightAsync(url, browserlessToken, 60000).ConfigureAwait(false);
                     if (result != null)
                     {
-                        AddToCache(url, result);
+                        AddToCache(cacheKey, result);
                         return result;
                     }
                 }
@@ -59,18 +61,18 @@ public class LiveScraper : ILiveScraper
                 }
             }
 
-                // Fall back to Playwright for JavaScript rendering
-                _logger?.LogInformation("[GetLeaderDataAsync] Using Playwright for {Url}", url);
-                var playwrightResult = await GetLeaderDataWithScraperAsync(url, 60000).ConfigureAwait(false);
-                if (playwrightResult != null)
-                {
-                    AddToCache(url, playwrightResult);
-                }
-                return playwrightResult;
-            }
-            catch (Exception ex)
+            // Fall back to Playwright for JavaScript rendering
+            _logger?.LogInformation("[GetLeaderDataAsync] Using Playwright for {Url}", url);
+            var playwrightResult = await GetLeaderDataWithScraperAsync(url, 60000).ConfigureAwait(false);
+            if (playwrightResult != null)
             {
-                _logger?.LogError(ex, "[GetLeaderDataAsync error]: {Message}", ex.Message);
+                AddToCache(cacheKey, playwrightResult);
+            }
+            return playwrightResult;
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "[GetLeaderDataAsync error]: {Message}", ex.Message);
             return null;
         }
     }
@@ -79,27 +81,29 @@ public class LiveScraper : ILiveScraper
     {
         try
         {
-                var htmlContent = await GetRenderedHtmlViaBrowserlessAsync(url, browserlessToken, timeoutMs).ConfigureAwait(false);
-                if (!string.IsNullOrWhiteSpace(htmlContent))
-                {
-                    _logger?.LogInformation("[Browserless] Successfully rendered HTML for {Url}", url);
-                    var result = await AnalyzeWithAgentAsync(htmlContent).ConfigureAwait(false);
-                    return result;
-                }
-                return null;
-            }
-            catch (Exception ex)
+            var htmlContent = await GetRenderedHtmlViaBrowserlessAsync(url, browserlessToken, timeoutMs).ConfigureAwait(false);
+            if (!string.IsNullOrWhiteSpace(htmlContent))
             {
-                _logger?.LogError(ex, "[GetLeaderDataWithBrowserlessOrPlaywrightAsync error]: {Message}", ex.Message);
+                _logger?.LogInformation("[Browserless] Successfully rendered HTML for {Url}", url);
+                var result = await AnalyzeWithAgentAsync(htmlContent).ConfigureAwait(false);
+                return result;
+            }
+            return null;
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "[GetLeaderDataWithBrowserlessOrPlaywrightAsync error]: {Message}", ex.Message);
             throw;
         }
     }
 
     public async Task<LeaderData?> GetLeaderDataWithScraperAsync(string url, int timeoutMs = 60000)
     {
-        if (TryGetFromCache(url, out var cachedData))
+        var cacheKey = GetCacheKey(url);
+
+        if (TryGetFromCache(cacheKey, out var cachedData))
         {
-            _logger?.LogInformation("[Cache HIT] Returning cached data for {Url}", url);
+            _logger?.LogInformation("[Cache HIT] Returning cached data for {Url} (key: {CacheKey})", url, cacheKey);
             return cachedData;
         }
 
@@ -178,7 +182,7 @@ public class LiveScraper : ILiveScraper
             if (result != null)
             {
                 _logger?.LogInformation("[{RenderMethod}] AI extraction succeeded: {Distance} km, Time: {Time}", renderMethod, result.DistanceKm, result.ElapsedTime);
-                AddToCache(url, result);
+                AddToCache(cacheKey, result);
             }
             else
             {
@@ -630,15 +634,15 @@ public class LiveScraper : ILiveScraper
             _logger?.LogInformation("[ScraperService] Success - received {Length} chars in {Duration}ms", html?.Length ?? 0, duration);
 
                 return html ?? string.Empty;
-            }
-            catch (HttpRequestException httpEx)
-            {
-                _logger?.LogError(httpEx, "[ScraperService] HTTP Exception: {Message}. Failed to connect to scraper service at {Url}. Ensure the service is running and accessible.", httpEx.Message, scraperServiceUrl);
-                throw new Exception($"Failed to connect to scraper service at {scraperServiceUrl}: {httpEx.Message}. Ensure the service is running and accessible.", httpEx);
-            }
-            catch (Exception ex)
-            {
-                _logger?.LogError(ex, "[ScraperService] Exception: {Message}", ex.Message);
+        }
+        catch (HttpRequestException httpEx)
+        {
+            _logger?.LogError(httpEx, "[ScraperService] HTTP Exception: {Message}. Failed to connect to scraper service at {Url}. Ensure the service is running and accessible.", httpEx.Message, scraperServiceUrl);
+            throw new Exception($"Failed to connect to scraper service at {scraperServiceUrl}: {httpEx.Message}. Ensure the service is running and accessible.", httpEx);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "[ScraperService] Exception: {Message}", ex.Message);
             throw;
         }
     }
@@ -649,38 +653,62 @@ public class LiveScraper : ILiveScraper
         await Task.CompletedTask;
     }
 
-    private static string StripHtmlTags(string html)
-    {
-        return Regex.Replace(html, @"<[^>]+>", " ")
-            .Replace("&nbsp;", " ")
-            .Replace("&amp;", "&")
-            .Replace("&lt;", "<")
-            .Replace("&gt;", ">");
-    }
-
-    private static bool TryGetFromCache(string url, out LeaderData? data)
-    {
-        lock (_cacheLock)
+        private static string StripHtmlTags(string html)
         {
-            if (_cache.TryGetValue(url, out var cached) && DateTime.UtcNow - cached.Timestamp < _cacheTTL)
+            return Regex.Replace(html, @"<[^>]+>", " ")
+                .Replace("&nbsp;", " ")
+                .Replace("&amp;", "&")
+                .Replace("&lt;", "<")
+                .Replace("&gt;", ">");
+        }
+
+        private static string GetCacheKey(string url)
+        {
+            // Extract base URL without query parameters
+            // This allows caching by race regardless of elapsed time or other query params
+            try
             {
-                data = cached.Data;
-                return true;
-            }
-            _cache.Remove(url);
-        }
-        data = null;
-        return false;
-    }
+                var uri = new Uri(url);
+                var baseUrl = $"{uri.Scheme}://{uri.Host}{uri.AbsolutePath}";
 
-    private static void AddToCache(string url, LeaderData? data)
-    {
-        lock (_cacheLock)
+                // Also extract race identifier from hash if present (e.g., #result)
+                if (!string.IsNullOrEmpty(uri.Fragment))
+                {
+                    baseUrl += uri.Fragment;
+                }
+
+                return baseUrl;
+            }
+            catch
+            {
+                // If URL parsing fails, use the original URL
+                return url;
+            }
+        }
+
+        private static bool TryGetFromCache(string url, out LeaderData? data)
         {
-            _cache[url] = (data, DateTime.UtcNow);
-            var expired = _cache.Where(kvp => DateTime.UtcNow - kvp.Value.Timestamp >= _cacheTTL)
-                                 .Select(kvp => kvp.Key).ToList();
-            expired.ForEach(k => _cache.Remove(k));
+            lock (_cacheLock)
+            {
+                if (_cache.TryGetValue(url, out var cached) && DateTime.UtcNow - cached.Timestamp < _cacheTTL)
+                {
+                    data = cached.Data;
+                    return true;
+                }
+                _cache.Remove(url);
+            }
+            data = null;
+            return false;
+        }
+
+        private static void AddToCache(string url, LeaderData? data)
+        {
+            lock (_cacheLock)
+            {
+                _cache[url] = (data, DateTime.UtcNow);
+                var expired = _cache.Where(kvp => DateTime.UtcNow - kvp.Value.Timestamp >= _cacheTTL)
+                                     .Select(kvp => kvp.Key).ToList();
+                expired.ForEach(k => _cache.Remove(k));
+            }
         }
     }
-}

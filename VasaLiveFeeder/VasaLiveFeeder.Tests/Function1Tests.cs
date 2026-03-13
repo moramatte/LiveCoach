@@ -74,7 +74,7 @@ public class Function1Tests
             // Target: Leader's time * 1.5 = finish at 90km in ~270 min * 1.5 = 405 min
             // I have 255 minutes left for 60km remaining
 
-            var (requiredPace, leaderDistance, isLive) = await func.DeriveTempoDelta("Vasaloppet", "30.00", "150", "", dryRun: false);
+            var (requiredPace, leaderDistance, isLive) = await func.DeriveTempoDelta("Vasaloppet", "30.00", "150", dryRun: false);
 
             Assert.AreEqual(60.0, leaderDistance);
             Assert.IsTrue(requiredPace > 0, "Required pace should be positive");
@@ -88,7 +88,7 @@ public class Function1Tests
             var func = new Function1(NullLogger<Function1>.Instance);
 
             // Use elapsed time directly (now required parameter)
-            var (pace1, _, isLive) = await func.DeriveTempoDelta("test10k", "5.0", "25", "", dryRun: true);
+            var (pace1, _, isLive) = await func.DeriveTempoDelta("test10k", "5.0", "25", dryRun: true);
 
             // Should calculate based on 25 minutes elapsed
             Assert.IsTrue(pace1 > 0);
@@ -137,7 +137,7 @@ public class Function1Tests
             var func = new Function1(NullLogger<Function1>.Instance);
 
             // Dry run should work without real scraper data
-            var (pace, leaderDist, isLive) = await func.DeriveTempoDelta("test10k", "3.0", "15", "", dryRun: true);
+            var (pace, leaderDist, isLive) = await func.DeriveTempoDelta("test10k", "3.0", "15", dryRun: true);
 
             Assert.IsTrue(pace > 0, "Dry run should return valid pace");
             Assert.IsTrue(leaderDist >= 0, "Dry run should return valid leader distance");

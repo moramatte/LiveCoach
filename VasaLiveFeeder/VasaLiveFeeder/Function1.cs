@@ -375,6 +375,7 @@ public class Function1
         return raceName.ToLower() switch
         {
             "vasaloppet" => 90.0,
+            "birken" => 53.0,
             "halvvasan" => 45,
             "ladiagonela" => 47.0,
             "craft" => 42.0,
@@ -394,6 +395,7 @@ public class Function1
         var raceBaseUrl =  raceName.ToLower() switch
         {
             "vasaloppet" => "https://skiclassics.com/live-center/?event=1264&season=2026&gender=men",
+            "birken" => "https://skiclassics.com/live-center/?event=1265&season=2026&gender=men",
             "moraloppet" => "https://live.eqtiming.com/76514",
             "mora" => "https://live.eqtiming.com/76514",
             "mora25" => "https://live.eqtiming.com/73153",

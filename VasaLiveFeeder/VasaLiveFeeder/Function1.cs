@@ -48,6 +48,7 @@ public class Function1
         string progressStr = null;
         string elapsedTimeStr = null;
         string currentSpeedStr = null;
+        string medalTimePctStr = null;
         bool dryRun = false;
         var rawQuery = req.Url.Query; // starts with '?' when present
         try
@@ -65,6 +66,7 @@ public class Function1
                     if (key == "progressinkm" || key == "progress" || key == "km") progressStr = val;
                     if (key == "elapsedtime" || key == "elapsed" || key == "time") elapsedTimeStr = val;
                     if (key == "currentspeed" || key == "speed") currentSpeedStr = val;
+                    if (key == "medaltimepct" || key == "medalpct" || key == "medal") medalTimePctStr = val;
                     if (key == "dryrun") dryRun = val.Equals("true", StringComparison.OrdinalIgnoreCase) || val == "1";
                 }
             }
@@ -100,6 +102,9 @@ public class Function1
                             if (root.TryGetProperty("time", out var jTime3)) elapsedTimeStr ??= jTime3.GetRawText().Trim('"');
                             if (root.TryGetProperty("currentSpeed", out var jSpeed)) currentSpeedStr ??= jSpeed.GetRawText().Trim('"');
                             if (root.TryGetProperty("speed", out var jSpeed2)) currentSpeedStr ??= jSpeed2.GetRawText().Trim('"');
+                            if (root.TryGetProperty("medalTimePct", out var jMedal)) medalTimePctStr ??= jMedal.GetRawText().Trim('"');
+                            if (root.TryGetProperty("medalPct", out var jMedal2)) medalTimePctStr ??= jMedal2.GetRawText().Trim('"');
+                            if (root.TryGetProperty("medal", out var jMedal3)) medalTimePctStr ??= jMedal3.GetRawText().Trim('"');
                             if (root.TryGetProperty("dryRun", out var jDry)) dryRun = jDry.GetBoolean();
                         }
                         catch (JsonException) { /* ignore parse errors below */ }
@@ -172,12 +177,30 @@ public class Function1
             return await CreateJsonResponse(req, message, HttpStatusCode.BadRequest);
         }
 
+        // Parse medalTimePct (default to 50% if not provided)
+        double medalTimePct = 50.0;
+        if (!string.IsNullOrWhiteSpace(medalTimePctStr))
+        {
+            if (!double.TryParse(medalTimePctStr.Trim().Trim('"'), NumberStyles.Float, CultureInfo.InvariantCulture, out medalTimePct))
+            {
+                _logger.LogWarning("Failed to parse medalTimePct. MedalTimePct='{MedalTimePctStr}'", medalTimePctStr);
+                var message = "Invalid medalTimePct value. Provide a numeric percentage value (e.g. 50 for 50%).";
+                return await CreateJsonResponse(req, message, HttpStatusCode.BadRequest);
+            }
+            if (medalTimePct < 0 || medalTimePct > 500)
+            {
+                _logger.LogWarning("medalTimePct out of range. MedalTimePct={MedalTimePct}", medalTimePct);
+                var message = "medalTimePct must be between 0 and 500 (percent).";
+                return await CreateJsonResponse(req, message, HttpStatusCode.BadRequest);
+            }
+        }
+
         double newSpeed;
         double leaderDistanceKm;
         bool live;
         try
         {
-            var (pace, leaderDistance, isLive) = await DeriveTempoDelta(raceName, progressStr, elapsedTimeStr, dryRun);
+            var (pace, leaderDistance, isLive) = await DeriveTempoDelta(raceName, progressStr, elapsedTimeStr, medalTimePct, dryRun);
             newSpeed = pace; // pace in min/km
             leaderDistanceKm = leaderDistance;
             live = isLive;
@@ -204,6 +227,11 @@ public class Function1
 
     public async Task<(double leaderDistanceKm, TimeSpan leaderElapsedTime, bool isLive)> GetLeaderDataAsync(string raceName, bool dryRun = false, double userElapsedTimeMinutes = 0)
     {
+        if (string.IsNullOrWhiteSpace(raceName))
+        {
+            throw new ArgumentException("Race name cannot be null or empty", nameof(raceName));
+        }
+
         if (dryRun)
         {
             // Dry run mode: Simulate leader based on user's elapsed time
@@ -281,17 +309,37 @@ public class Function1
         return (leaderData.DistanceKm, leaderTime, true); // successfully scraped: live data
     }
 
-    public async Task<(double requiredPaceMinPerKm, double leaderDistanceKm, bool isLive)> DeriveTempoDelta(string raceName, string myProgressStr, string elapsedTimeStr, bool dryRun = false)
+    public async Task<(double requiredPaceMinPerKm, double leaderDistanceKm, bool isLive)> DeriveTempoDelta(string raceName, string myProgressStr, string elapsedTimeStr, double medalTimePct = 50.0, bool dryRun = false)
     {
         var myProgress = double.Parse(myProgressStr, CultureInfo.InvariantCulture);
         var totalDistance = GetTotalDistance(raceName);
 
-        // Parse user's elapsed time (required parameter)
-        var myElapsedTimeMinutes = double.Parse(elapsedTimeStr, NumberStyles.Float, CultureInfo.InvariantCulture);
-     
-        _logger.LogWarning("[DEVICE_PARAMS] race={Race}, km={Km}, elapsed={Elapsed}, dryRun={DryRun}", raceName, myProgressStr, elapsedTimeStr, dryRun);
+        // Parse user's elapsed time (optional when dryRun=true)
+        double myElapsedTimeMinutes;
+        if (string.IsNullOrWhiteSpace(elapsedTimeStr))
+        {
+            if (!dryRun)
+            {
+                throw new ArgumentException("Elapsed time is required when dryRun is false. Provide elapsedTime parameter (in minutes).", nameof(elapsedTimeStr));
+            }
+            // For dryRun mode without elapsed time, use progress and a default pace to estimate elapsed time
+            // Assume user is going at 5 min/km pace
+            myElapsedTimeMinutes = myProgress * 5.0;
+            _logger.LogInformation("[DryRun] No elapsed time provided. Estimating {Elapsed} minutes based on {Progress} km at 5 min/km pace", 
+                myElapsedTimeMinutes, myProgress);
+        }
+        else
+        {
+            if (!double.TryParse(elapsedTimeStr, NumberStyles.Float, CultureInfo.InvariantCulture, out myElapsedTimeMinutes))
+            {
+                throw new ArgumentException($"Invalid elapsed time value '{elapsedTimeStr}'. Must be a valid number in minutes.", nameof(elapsedTimeStr));
+            }
+        }
 
-      
+        _logger.LogWarning("[DEVICE_PARAMS] race={Race}, km={Km}, elapsed={Elapsed}, medalTimePct={MedalTimePct}%, dryRun={DryRun}", 
+            raceName, myProgressStr, elapsedTimeStr ?? "(estimated)", medalTimePct, dryRun);
+
+
         var (leaderDistanceKm, leaderElapsedTime, isLive) = await GetLeaderDataAsync(raceName, dryRun, myElapsedTimeMinutes);
 
         // Validate elapsed time - must be non-negative and realistic
@@ -311,15 +359,18 @@ public class Function1
             return (5.0, 0, false); // Return default pace if leader hasn't started
         }
 
-        // Calculate target finishing time (leader's time + 50%)
+        // Calculate target finishing time based on medalTimePct (e.g., 50% means leader's time + 50%)
+        // medalTimePct is in percent (50 = 50%), so multiplier is 1 + (medalTimePct / 100)
+        var timeMultiplier = 1.0 + (medalTimePct / 100.0);
         TimeSpan targetFinishTime;
 
         if (leaderDistanceKm >= totalDistance)
         {
             // Leader has finished - we have exact target time
-            targetFinishTime = TimeSpan.FromSeconds(leaderElapsedTime.TotalSeconds * 1.5);
-            _logger.LogInformation("Leader finished in {LeaderTime}. Target time: {TargetTime}", 
-                leaderElapsedTime.ToString(@"hh\:mm\:ss"), 
+            targetFinishTime = TimeSpan.FromSeconds(leaderElapsedTime.TotalSeconds * timeMultiplier);
+            _logger.LogInformation("Leader finished in {LeaderTime}. Target time ({MedalTimePct}%): {TargetTime}", 
+                leaderElapsedTime.ToString(@"hh\:mm\:ss"),
+                medalTimePct,
                 targetFinishTime.ToString(@"hh\:mm\:ss"));
         }
         else
@@ -327,13 +378,14 @@ public class Function1
             // Leader still racing - extrapolate their finishing time
             var leaderMeanPaceMinPerKm = leaderElapsedTime.TotalMinutes / leaderDistanceKm;
             var leaderEstimatedFinishTime = TimeSpan.FromMinutes(totalDistance * leaderMeanPaceMinPerKm);
-            targetFinishTime = TimeSpan.FromSeconds(leaderEstimatedFinishTime.TotalSeconds * 1.5);
+            targetFinishTime = TimeSpan.FromSeconds(leaderEstimatedFinishTime.TotalSeconds * timeMultiplier);
 
-            _logger.LogInformation("Leader at {LeaderDist} km in {LeaderTime} (pace: {LeaderPace:F2} min/km). Estimated finish: {EstFinish}. Target time: {TargetTime}",
+            _logger.LogInformation("Leader at {LeaderDist} km in {LeaderTime} (pace: {LeaderPace:F2} min/km). Estimated finish: {EstFinish}. Target time ({MedalTimePct}%): {TargetTime}",
                 leaderDistanceKm,
                 leaderElapsedTime.ToString(@"hh\:mm\:ss"),
                 leaderMeanPaceMinPerKm,
                 leaderEstimatedFinishTime.ToString(@"hh\:mm\:ss"),
+                medalTimePct,
                 targetFinishTime.ToString(@"hh\:mm\:ss"));
         }
 
@@ -392,6 +444,11 @@ public class Function1
 
     private string GetRaceUrl(string raceName)
     {
+        if (string.IsNullOrWhiteSpace(raceName))
+        {
+            throw new ArgumentException("Race name cannot be null or empty", nameof(raceName));
+        }
+
         var raceBaseUrl =  raceName.ToLower() switch
         {
             "vasaloppet" => "https://skiclassics.com/live-center/?event=1264&season=2026&gender=men",
@@ -406,7 +463,7 @@ public class Function1
             "test10k" => "_",
             "test20k" => "_",
             "zelta" => "https://skiclassics.com/live-center/?event=8338&season=2026&gender=men",
-            _ => throw new Exception($"No race url defined for {raceName}")
+            _ => throw new ArgumentException($"Unknown race name '{raceName}'. Supported races: vasaloppet, birken, moraloppet, mora, mora25, craft, finlandia, ladiagonela, test10k, test20k, zelta", nameof(raceName))
         };
 
         if (raceBaseUrl.Contains("eqtiming"))

@@ -30,6 +30,11 @@ public class LiveScraper : ILiveScraper
 
     public async Task<LeaderData?> GetLeaderDataAsync(string url)
     {
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            throw new ArgumentException("URL cannot be null or empty", nameof(url));
+        }
+
         var cacheKey = GetCacheKey(url);
 
         if (TryGetFromCache(cacheKey, out var cachedData))
@@ -99,6 +104,11 @@ public class LiveScraper : ILiveScraper
 
     public async Task<LeaderData?> GetLeaderDataWithScraperAsync(string url, int timeoutMs = 60000)
     {
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            throw new ArgumentException("URL cannot be null or empty", nameof(url));
+        }
+
         var cacheKey = GetCacheKey(url);
 
         if (TryGetFromCache(cacheKey, out var cachedData))
@@ -664,6 +674,11 @@ public class LiveScraper : ILiveScraper
 
         private static string GetCacheKey(string url)
         {
+            if (string.IsNullOrWhiteSpace(url))
+            {
+                throw new ArgumentNullException(nameof(url), "URL cannot be null or empty when generating cache key");
+            }
+
             // Extract base URL without query parameters
             // This allows caching by race regardless of elapsed time or other query params
             try

@@ -4,6 +4,168 @@ const { chromium } = require('playwright');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+async function dismissConsentPrompts(page) {
+  const selectors = [
+    'button.wcc-btn.wcc-btn-accept[data-tag="detail-accept-button"]',
+    'button[aria-label="Accept All"][data-tag="detail-accept-button"]',
+    'button.wcc-btn-accept',
+    '.wcc-btn-accept',
+    '[data-tag="detail-accept-button"]',
+    '#onetrust-accept-btn-handler',
+    'button#onetrust-accept-btn-handler',
+    'button:has-text("Accept")',
+    'button:has-text("I Agree")',
+    'button:has-text("Agree")',
+    'button:has-text("Accept all")',
+    'button:has-text("Accept All")',
+    'button:has-text("Accept all cookies")',
+    'button:has-text("Allow all")',
+    'button:has-text("Allow All")',
+    'button:has-text("Consent")',
+    'button:has-text("OK")',
+    '[aria-label="Accept"]',
+    '[aria-label="Accept all"]',
+    '[title="Accept"]',
+    '[title="Accept all"]',
+    '[id*="accept"]',
+    '[id*="consent"]',
+    '[class*="accept"]',
+    '[class*="consent"]',
+    '[data-testid*="accept"]',
+    '[data-testid*="consent"]'
+  ];
+
+  const privacyMarkers = [
+    'We value your privacy',
+    'Consent Preferences',
+    'partners use cookies',
+    'tracking technologies',
+    'personalized ads and content'
+  ];
+
+  async function tryDismissInScope(scope, scopeName) {
+    for (const selector of selectors) {
+      try {
+        const button = scope.locator(selector).first();
+        if (await button.isVisible({ timeout: 1200 })) {
+          await button.click({ timeout: 2500, force: true });
+          console.log(`[${new Date().toISOString()}] Dismissed consent prompt in ${scopeName} using selector: ${selector}`);
+          await page.waitForTimeout(1200);
+          return true;
+        }
+      } catch {
+        // try next selector
+      }
+    }
+
+    try {
+      const bodyText = await scope.locator('body').innerText({ timeout: 1500 });
+      const hasPrivacyBanner = privacyMarkers.some(marker => bodyText.includes(marker));
+      if (!hasPrivacyBanner) {
+        return false;
+      }
+
+      console.log(`[${new Date().toISOString()}] Detected privacy banner text in ${scopeName}`);
+
+      const fallbackButtons = scope.locator('button, [role="button"], input[type="button"], input[type="submit"]');
+      const count = await fallbackButtons.count();
+      for (let i = 0; i < count; i++) {
+        try {
+          const button = fallbackButtons.nth(i);
+          const text = ((await button.innerText({ timeout: 500 }).catch(() => '')) || '').trim();
+          const normalizedText = text.toLowerCase();
+          if (normalizedText.includes('accept') || normalizedText.includes('agree') || normalizedText.includes('allow all') || normalizedText.includes('ok')) {
+            await button.click({ timeout: 2500, force: true });
+            console.log(`[${new Date().toISOString()}] Dismissed privacy banner in ${scopeName} using fallback button text: ${text}`);
+            await page.waitForTimeout(1200);
+            return true;
+          }
+        } catch {
+          // continue
+        }
+      }
+    } catch {
+      // ignore scope text inspection failures
+    }
+
+    return false;
+  }
+
+  if (await tryDismissInScope(page, 'main page')) {
+    return true;
+  }
+
+  for (const frame of page.frames().slice(1)) {
+    if (await tryDismissInScope(frame, 'frame')) {
+      return true;
+    }
+  }
+
+  try {
+    await page.evaluate(() => {
+      const acceptSelectors = [
+        'button.wcc-btn.wcc-btn-accept[data-tag="detail-accept-button"]',
+        'button[aria-label="Accept All"][data-tag="detail-accept-button"]',
+        'button.wcc-btn-accept',
+        '.wcc-btn-accept',
+        '[data-tag="detail-accept-button"]'
+      ];
+
+      for (const selector of acceptSelectors) {
+        const el = document.querySelector(selector);
+        if (el) {
+          el.click();
+        }
+      }
+
+      try {
+        if (typeof window !== 'undefined') {
+          const consentData = { action: 'accept_all', source: 'playwright' };
+          window.localStorage?.setItem('wcc_consent', JSON.stringify(consentData));
+          window.localStorage?.setItem('cookieyes-consent', JSON.stringify(consentData));
+          document.cookie = 'cookieyes-consent=accept; path=/; max-age=31536000';
+          document.cookie = 'wt_consent=yes; path=/; max-age=31536000';
+        }
+      } catch {}
+
+      const overlaySelectors = [
+        '.wcc-consent-container',
+        '.wcc-overlay',
+        '.wcc-banner-container',
+        '.wcc-modal',
+        '.wcc-prefrence-btn-wrapper',
+        '.wcc-footer-wrapper',
+        '#onetrust-banner-sdk',
+        '.onetrust-pc-dark-filter',
+        '.onetrust-pc-lightbox',
+        '[id*="consent"]',
+        '[class*="consent"]',
+        '[id*="cookie"]',
+        '[class*="cookie"]',
+        '[aria-modal="true"]'
+      ];
+
+      for (const selector of overlaySelectors) {
+        document.querySelectorAll(selector).forEach(el => el.remove());
+      }
+
+      if (document.body) {
+        document.body.style.overflow = 'auto';
+      }
+      if (document.documentElement) {
+        document.documentElement.style.overflow = 'auto';
+      }
+    });
+
+    console.log(`[${new Date().toISOString()}] Applied aggressive consent acceptance + overlay removal fallback`);
+    await page.waitForTimeout(1800);
+  } catch {
+    // ignore DOM cleanup failures
+  }
+
+  return false;
+}
+
 // Middleware to parse JSON
 app.use(express.json());
 
@@ -52,6 +214,9 @@ app.post('/render', async (req, res) => {
       timeout: 90000
     });
 
+    // Dismiss cookie / agreement prompts that block the results list
+    await dismissConsentPrompts(page);
+
     // Additional wait for JavaScript to populate dynamic content
     // EQTiming and SkiClassics load results via JavaScript after page load
     console.log(`[${new Date().toISOString()}] Waiting for JavaScript to execute...`);
@@ -59,18 +224,24 @@ app.post('/render', async (req, res) => {
 
     // Try to wait for common table elements with longer timeout
     try {
-      await page.waitForSelector('table tbody tr, .col-point-scroll, [data-checkpoint]', { 
-        timeout: 8000  // Increased to 8 seconds
+      await page.waitForSelector('table tbody tr, .col-point-scroll, [data-checkpoint]', {
+        timeout: 8000
       });
       console.log(`[${new Date().toISOString()}] Results table detected, waiting for data population...`);
-
-      // Give extra time for table data to populate
       await page.waitForTimeout(2000);
-
     } catch (e) {
-      console.log(`[${new Date().toISOString()}] No results table found after wait, continuing anyway`);
-      // Still wait a bit in case data loads without the selector
-      await page.waitForTimeout(2000);
+      console.log(`[${new Date().toISOString()}] No results table found after first wait, retrying consent cleanup...`);
+      await dismissConsentPrompts(page);
+      try {
+        await page.waitForSelector('table tbody tr, .col-point-scroll, [data-checkpoint]', {
+          timeout: 5000
+        });
+        console.log(`[${new Date().toISOString()}] Results table detected after retry cleanup`);
+        await page.waitForTimeout(1500);
+      } catch {
+        console.log(`[${new Date().toISOString()}] Still no results table after retry, continuing anyway`);
+        await page.waitForTimeout(2000);
+      }
     }
 
     // Get rendered HTML

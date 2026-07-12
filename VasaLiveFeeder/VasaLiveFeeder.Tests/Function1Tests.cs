@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Net;
 using System.Text.Json;
 using System.Threading.Tasks;
@@ -53,14 +54,46 @@ public class Function1Tests
     [TestMethod]
     public async Task GetLeaderDataAsync_ReturnsLeaderDistanceAndTime()
     {
+        await EnsureScraperSecretsConfiguredAsync();
+
         var func = new Function1(NullLogger<Function1>.Instance);
+        var (distance, time, isLive) = await func.GetLeaderDataAsync("vasaloppet", dryRun: false, userElapsedTimeMinutes: 180);
 
-        // Test dry run mode (doesn't need userElapsedTimeMinutes parameter in dry run)
-        var (distance, time, isLive) = await func.GetLeaderDataAsync("test10k", dryRun: true, userElapsedTimeMinutes: 0);
+        Assert.IsTrue(distance > 0, "Expected a positive leader distance from live scraping.");
+        Assert.IsTrue(time.TotalMinutes > 0, "Expected a positive leader elapsed time from live scraping.");
+        Assert.IsTrue(isLive, "Expected live scraper data, not fallback simulation.");
+    }
 
-        Assert.IsTrue(distance >= 0);
-        Assert.IsTrue(time.TotalMinutes > 0); // Non-nullable now
-        Assert.IsFalse(isLive); // Dry run should return false for live
+    private static async Task EnsureScraperSecretsConfiguredAsync()
+    {
+        var localSettingsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "VasaLiveFeeder", "local.settings.json");
+        if (!File.Exists(localSettingsPath))
+        {
+            Assert.Inconclusive($"local.settings.json not found: {localSettingsPath}");
+            return;
+        }
+
+        using var doc = JsonDocument.Parse(await File.ReadAllTextAsync(localSettingsPath));
+        if (doc.RootElement.TryGetProperty("Values", out var values))
+        {
+            if (values.TryGetProperty("SCRAPER_SERVICE_URL", out var scraperUrl))
+            {
+                Environment.SetEnvironmentVariable("SCRAPER_SERVICE_URL", scraperUrl.GetString());
+            }
+
+            if (values.TryGetProperty("GROQ_API_KEY", out var groqApiKey))
+            {
+                Environment.SetEnvironmentVariable("GROQ_API_KEY", groqApiKey.GetString());
+            }
+        }
+
+        var configuredScraperServiceUrl = Environment.GetEnvironmentVariable("SCRAPER_SERVICE_URL");
+        var configuredGroqApiKey = Environment.GetEnvironmentVariable("GROQ_API_KEY");
+
+        if (string.IsNullOrWhiteSpace(configuredScraperServiceUrl) || string.IsNullOrWhiteSpace(configuredGroqApiKey))
+        {
+            Assert.Inconclusive("SCRAPER_SERVICE_URL and GROQ_API_KEY must be configured in local.settings.json for this integration test.");
+        }
     }
 
     [TestMethod]

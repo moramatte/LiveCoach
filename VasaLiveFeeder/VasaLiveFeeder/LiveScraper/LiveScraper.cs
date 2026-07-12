@@ -128,6 +128,20 @@ public class LiveScraper : ILiveScraper
             string? htmlContent = null;
             string renderMethod = "unknown";
 
+            if (IsSkiClassicsUrl(url))
+            {
+                _logger?.LogInformation("[SkiClassics API] Attempting deterministic extraction for {Url}", url);
+                var apiResult = await TryGetLeaderDataFromSkiClassicsApiAsync(url).ConfigureAwait(false);
+                if (apiResult != null)
+                {
+                    _logger?.LogInformation("[SkiClassics API] Deterministic extraction succeeded: {Distance} km, Time: {Time}", apiResult.DistanceKm, apiResult.ElapsedTime);
+                    AddToCache(cacheKey, apiResult);
+                    return apiResult;
+                }
+
+                _logger?.LogWarning("[SkiClassics API] Deterministic extraction failed for {Url}. Falling back to rendered HTML parsing.", url);
+            }
+
             // Try scraper service first (if SCRAPER_SERVICE_URL is set)
             var scraperServiceUrl = Environment.GetEnvironmentVariable("SCRAPER_SERVICE_URL");
             if (!string.IsNullOrWhiteSpace(scraperServiceUrl))
@@ -136,8 +150,18 @@ public class LiveScraper : ILiveScraper
                 {
                     _logger?.LogInformation("[ScraperService] Using scraper service at {ServiceUrl}", scraperServiceUrl);
                     htmlContent = await GetRenderedHtmlViaScraperServiceAsync(url, scraperServiceUrl, timeoutMs).ConfigureAwait(false);
-                    renderMethod = "ScraperService";
-                    _logger?.LogInformation("[ScraperService] Successfully rendered HTML ({Length} chars)", htmlContent?.Length ?? 0);
+                    if (!string.IsNullOrWhiteSpace(htmlContent) &&
+                        (htmlContent.Contains("We value your privacy", StringComparison.OrdinalIgnoreCase) ||
+                         htmlContent.Contains("Consent Preferences", StringComparison.OrdinalIgnoreCase)))
+                    {
+                        _logger?.LogWarning("[ScraperService] Returned privacy prompt HTML for {Url}. Falling through to Browserless/Playwright.", url);
+                        htmlContent = null;
+                    }
+                    else
+                    {
+                        renderMethod = "ScraperService";
+                        _logger?.LogInformation("[ScraperService] Successfully rendered HTML ({Length} chars)", htmlContent?.Length ?? 0);
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -174,7 +198,31 @@ public class LiveScraper : ILiveScraper
                 page.SetDefaultTimeout(timeoutMs);
 
                 await page.GotoAsync(url, new PageGotoOptions { WaitUntil = WaitUntilState.NetworkIdle }).ConfigureAwait(false);
+                await DismissConsentPromptsAsync(page).ConfigureAwait(false);
+                try
+                {
+                    await page.WaitForSelectorAsync("table tbody tr, .col-point-scroll, [data-checkpoint]", new PageWaitForSelectorOptions { Timeout = 5000 }).ConfigureAwait(false);
+                }
+                catch
+                {
+                    _logger?.LogInformation("[Playwright] No results table found after first cleanup, retrying consent cleanup");
+                    await DismissConsentPromptsAsync(page).ConfigureAwait(false);
+                    try
+                    {
+                        await page.WaitForSelectorAsync("table tbody tr, .col-point-scroll, [data-checkpoint]", new PageWaitForSelectorOptions { Timeout = 3000 }).ConfigureAwait(false);
+                    }
+                    catch
+                    {
+                        _logger?.LogInformation("[Playwright] Still no results table after retry cleanup");
+                    }
+                }
                 htmlContent = await page.ContentAsync().ConfigureAwait(false);
+                if (htmlContent.Contains("We value your privacy", StringComparison.OrdinalIgnoreCase) ||
+                    htmlContent.Contains("Consent Preferences", StringComparison.OrdinalIgnoreCase))
+                {
+                    var htmlPreview = htmlContent.Length > 2000 ? htmlContent.Substring(0, 2000) : htmlContent;
+                    _logger?.LogWarning("[Playwright] Privacy prompt still present after dismissal attempt for {Url}. HTML preview: {HtmlPreview}", url, htmlPreview);
+                }
                 renderMethod = "Playwright";
                 _logger?.LogInformation("[Playwright] Successfully fetched HTML ({Length} chars)", htmlContent.Length);
             }
@@ -186,6 +234,14 @@ public class LiveScraper : ILiveScraper
                 return null;
             }
 
+            var deterministicResult = TryParseLeaderDataDirectly(htmlContent);
+            if (deterministicResult != null)
+            {
+                _logger?.LogInformation("[{RenderMethod}] Deterministic HTML parser succeeded: {Distance} km, Time: {Time}", renderMethod, deterministicResult.DistanceKm, deterministicResult.ElapsedTime);
+                AddToCache(cacheKey, deterministicResult);
+                return deterministicResult;
+            }
+
             _logger?.LogInformation("[{RenderMethod}] Analyzing HTML with AI...", renderMethod);
             var result = await AnalyzeWithAgentAsync(htmlContent).ConfigureAwait(false);
 
@@ -193,14 +249,21 @@ public class LiveScraper : ILiveScraper
             {
                 _logger?.LogInformation("[{RenderMethod}] AI extraction succeeded: {Distance} km, Time: {Time}", renderMethod, result.DistanceKm, result.ElapsedTime);
                 AddToCache(cacheKey, result);
-            }
-            else
-            {
-                _logger?.LogWarning("[{RenderMethod}] AI extraction returned null. HTML was retrieved successfully but AI could not extract race data. " +
-                    "This likely means: 1) Race page format changed, 2) Race not started yet, 3) AI model failed to parse, 4) GROQ_API_KEY invalid/out of credits", renderMethod);
+                return result;
             }
 
-                return result;
+            _logger?.LogWarning("[{RenderMethod}] AI extraction returned null. Trying SkiClassics API fallback.", renderMethod);
+
+            var apiFallbackResult = await TryGetLeaderDataFromSkiClassicsApiAsync(url).ConfigureAwait(false);
+            if (apiFallbackResult != null)
+            {
+                _logger?.LogInformation("[SkiClassics API] Fallback succeeded: {Distance} km, Time: {Time}", apiFallbackResult.DistanceKm, apiFallbackResult.ElapsedTime);
+                AddToCache(cacheKey, apiFallbackResult);
+                return apiFallbackResult;
+            }
+
+            _logger?.LogWarning("[{RenderMethod}] All extraction strategies failed", renderMethod);
+            return null;
             }
             catch (Exception ex)
             {
@@ -663,14 +726,556 @@ public class LiveScraper : ILiveScraper
         await Task.CompletedTask;
     }
 
-        private static string StripHtmlTags(string html)
+    private async Task DismissConsentPromptsAsync(IPage page)
+    {
+        var selectors = new[]
         {
-            return Regex.Replace(html, @"<[^>]+>", " ")
-                .Replace("&nbsp;", " ")
-                .Replace("&amp;", "&")
-                .Replace("&lt;", "<")
-                .Replace("&gt;", ">");
+            "button.wcc-btn.wcc-btn-accept[data-tag=\"detail-accept-button\"]",
+            ".wcc-btn-accept",
+            "[data-tag=\"detail-accept-button\"]",
+            "#onetrust-accept-btn-handler",
+            "button:has-text(\"Accept\")",
+            "button:has-text(\"I Agree\")",
+            "button:has-text(\"Agree\")",
+            "button:has-text(\"Accept all\")",
+            "button:has-text(\"Accept All\")",
+            "button:has-text(\"Accept all cookies\")",
+            "button:has-text(\"Allow all\")",
+            "button:has-text(\"Allow All\")",
+            "button:has-text(\"Consent\")",
+            "button:has-text(\"OK\")",
+            "[aria-label=\"Accept\"]",
+            "[aria-label=\"Accept all\"]",
+            "[title=\"Accept\"]",
+            "[title=\"Accept all\"]",
+            "[id*=\"accept\"]",
+            "[id*=\"consent\"]",
+            "[class*=\"accept\"]",
+            "[class*=\"consent\"]",
+            "[data-testid*=\"accept\"]",
+            "[data-testid*=\"consent\"]"
+        };
+
+        foreach (var selector in selectors)
+        {
+            try
+            {
+                var button = page.Locator(selector).First;
+                if (await button.IsVisibleAsync(new LocatorIsVisibleOptions { Timeout = 1200 }).ConfigureAwait(false))
+                {
+                    await button.ClickAsync(new LocatorClickOptions { Timeout = 2500, Force = true }).ConfigureAwait(false);
+                    _logger?.LogInformation("[Playwright] Dismissed consent prompt using selector: {Selector}", selector);
+                    await page.WaitForTimeoutAsync(1200).ConfigureAwait(false);
+                    return;
+                }
+            }
+            catch
+            {
+                // Try next selector
+            }
         }
+
+        foreach (var frame in page.Frames)
+        {
+            if (frame == page.MainFrame)
+            {
+                continue;
+            }
+
+            foreach (var selector in selectors)
+            {
+                try
+                {
+                    var button = frame.Locator(selector).First;
+                    if (await button.IsVisibleAsync(new LocatorIsVisibleOptions { Timeout = 1200 }).ConfigureAwait(false))
+                    {
+                        await button.ClickAsync(new LocatorClickOptions { Timeout = 2500, Force = true }).ConfigureAwait(false);
+                        _logger?.LogInformation("[Playwright] Dismissed consent prompt inside iframe using selector: {Selector}", selector);
+                        await page.WaitForTimeoutAsync(1200).ConfigureAwait(false);
+                        return;
+                    }
+                }
+                catch
+                {
+                    // Try next selector
+                }
+            }
+        }
+
+        try
+        {
+            await page.EvaluateAsync(@"
+                () => {
+                    const overlaySelectors = [
+                        '.wcc-consent-container',
+                        '.wcc-overlay',
+                        '.wcc-banner-container',
+                        '.wcc-modal',
+                        '.wcc-prefrence-btn-wrapper',
+                        '#onetrust-banner-sdk',
+                        '.onetrust-pc-dark-filter',
+                        '.onetrust-pc-lightbox',
+                        '[id*=""consent""]',
+                        '[class*=""consent""]',
+                        '[id*=""cookie""]',
+                        '[class*=""cookie""]',
+                        '[aria-modal=""true""]'
+                    ];
+
+                    for (const selector of overlaySelectors) {
+                        document.querySelectorAll(selector).forEach(el => el.remove());
+                    }
+
+                    if (document.body) document.body.style.overflow = 'auto';
+                    if (document.documentElement) document.documentElement.style.overflow = 'auto';
+                }").ConfigureAwait(false);
+
+            _logger?.LogInformation("[Playwright] Removed consent overlay elements from DOM as fallback");
+            await page.WaitForTimeoutAsync(1200).ConfigureAwait(false);
+        }
+        catch
+        {
+            // Ignore DOM cleanup failures
+        }
+    }
+
+    private LeaderData? TryParseLeaderDataDirectly(string html)
+    {
+        if (string.IsNullOrWhiteSpace(html))
+        {
+            return null;
+        }
+
+        try
+        {
+            var distanceKm = TryExtractSkiClassicsDistanceKm(html);
+            if (!distanceKm.HasValue)
+            {
+                return null;
+            }
+
+            var firstRowMatch = Regex.Match(
+                html,
+                @"<table[^>]*class=""[^"">]*live-center-table[^"">]*""[^>]*>.*?<tbody[^>]*>\s*(?<row><tr\b[^>]*>.*?</tr>)",
+                RegexOptions.IgnoreCase | RegexOptions.Singleline);
+
+            if (!firstRowMatch.Success)
+            {
+                return null;
+            }
+
+            var cellMatches = Regex.Matches(
+                firstRowMatch.Groups["row"].Value,
+                @"<t[dh][^>]*>(.*?)</t[dh]>",
+                RegexOptions.IgnoreCase | RegexOptions.Singleline);
+
+            if (cellMatches.Count == 0)
+            {
+                return null;
+            }
+
+            var rankText = NormalizeHtmlText(cellMatches[0].Groups[1].Value);
+            if (!string.Equals(rankText, "1", StringComparison.OrdinalIgnoreCase))
+            {
+                return null;
+            }
+
+            var timeText = cellMatches
+                .Cast<Match>()
+                .Select(match => NormalizeHtmlText(match.Groups[1].Value))
+                .Reverse()
+                .FirstOrDefault(value => Regex.IsMatch(value, @"^\d{1,2}:\d{2}:\d{2}(?:\.\d+)?$"));
+
+            if (!TryParseLeaderElapsedTime(timeText, out var leaderTime))
+            {
+                return null;
+            }
+
+            return new LeaderData(distanceKm.Value, leaderTime);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(ex, "[HTML fallback parser] Failed to parse leader data directly");
+            return null;
+        }
+    }
+
+    private static double? TryExtractSkiClassicsDistanceKm(string html)
+    {
+        var distancePatterns = new[]
+        {
+            @"checkpoint-item[^"">]*data-checkpoint-active=""true""[^>]*>.*?<h[34][^>]*>(?<text>.*?)</h[34]>",
+            @"<div[^>]*class=""[^"">]*results-container[^"">]*""[^>]*>\s*<h3[^>]*>(?<text>.*?)</h3>"
+        };
+
+        foreach (var pattern in distancePatterns)
+        {
+            var match = Regex.Match(html, pattern, RegexOptions.IgnoreCase | RegexOptions.Singleline);
+            if (!match.Success)
+            {
+                continue;
+            }
+
+            var distance = TryExtractDistanceKmFromText(NormalizeHtmlText(match.Groups["text"].Value));
+            if (distance.HasValue)
+            {
+                return distance;
+            }
+        }
+
+        return null;
+    }
+
+    private static double? TryExtractDistanceKmFromText(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return null;
+        }
+
+        var distanceMatch = Regex.Match(text, @"([\d.,]+)\s*km", RegexOptions.IgnoreCase);
+        if (!distanceMatch.Success)
+        {
+            return null;
+        }
+
+        var distanceStr = distanceMatch.Groups[1].Value.Replace(',', '.');
+        return double.TryParse(distanceStr, NumberStyles.Float, CultureInfo.InvariantCulture, out var distanceKm)
+            ? distanceKm
+            : null;
+    }
+
+    private static bool TryParseLeaderElapsedTime(string? rawTime, out TimeSpan leaderTime)
+    {
+        leaderTime = default;
+        if (string.IsNullOrWhiteSpace(rawTime))
+        {
+            return false;
+        }
+
+        var normalizedTime = rawTime.Trim();
+        if (normalizedTime.StartsWith('+'))
+        {
+            normalizedTime = normalizedTime[1..].Trim();
+        }
+
+        normalizedTime = normalizedTime.Split('.')[0];
+        return TimeSpan.TryParse(normalizedTime, CultureInfo.InvariantCulture, out leaderTime)
+            || TimeSpan.TryParse(normalizedTime, out leaderTime);
+    }
+
+    private static string NormalizeHtmlText(string html)
+    {
+        return Regex.Replace(StripHtmlTags(html), @"\s+", " ").Trim();
+    }
+
+    private static string StripHtmlTags(string html)
+    {
+        return Regex.Replace(html, @"<[^>]+>", " ")
+            .Replace("&nbsp;", " ")
+            .Replace("&amp;", "&")
+            .Replace("&lt;", "<")
+            .Replace("&gt;", ">");
+    }
+
+    private async Task<LeaderData?> TryGetLeaderDataFromSkiClassicsApiAsync(string raceUrl)
+    {
+        try
+        {
+            if (!TryExtractSkiClassicsParams(raceUrl, out var eventId, out var season, out var gender))
+            {
+                return null;
+            }
+
+            var apiUrl = "https://skiclassics.com/wp-content/themes/skiclassics/v3_live_center/ajax/post_data.php";
+
+            var informationPayload = new
+            {
+                postdata = new
+                {
+                    request = new { type = "information", mode = "prod", @base = "https://skiclassics.com" },
+                    event_id = eventId,
+                    season,
+                    gender
+                }
+            };
+
+            using var informationRequest = new HttpRequestMessage(HttpMethod.Post, apiUrl)
+            {
+                Content = new StringContent(JsonSerializer.Serialize(informationPayload), Encoding.UTF8, "application/json")
+            };
+
+            using var informationResponse = await _httpClient.SendAsync(informationRequest).ConfigureAwait(false);
+            if (!informationResponse.IsSuccessStatusCode)
+            {
+                return null;
+            }
+
+            var infoJsonText = await informationResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
+            using var infoDoc = JsonDocument.Parse(infoJsonText);
+            var infoRoot = infoDoc.RootElement;
+
+            if (!infoRoot.TryGetProperty("races", out var racesElement) || racesElement.ValueKind != JsonValueKind.Array)
+            {
+                return null;
+            }
+
+            string? selectedRaceId = null;
+            foreach (var race in racesElement.EnumerateArray())
+            {
+                if (!race.TryGetProperty("id", out var raceIdEl))
+                {
+                    continue;
+                }
+
+                var raceGender = TryGetJsonPropertyValue(race, "sex")
+                    ?? TryGetJsonPropertyValue(race, "gender")
+                    ?? TryGetJsonPropertyValue(race, "gender_label");
+
+                if (GenderMatches(raceGender, gender))
+                {
+                    selectedRaceId = raceIdEl.GetRawText().Trim('"');
+                    break;
+                }
+            }
+
+            if (string.IsNullOrWhiteSpace(selectedRaceId))
+            {
+                return null;
+            }
+
+            var checkpointsPayload = new
+            {
+                postdata = new
+                {
+                    request = new { type = "checkpoints", mode = "prod", @base = "https://skiclassics.com" },
+                    race_id = selectedRaceId
+                }
+            };
+
+            using var checkpointsRequest = new HttpRequestMessage(HttpMethod.Post, apiUrl)
+            {
+                Content = new StringContent(JsonSerializer.Serialize(checkpointsPayload), Encoding.UTF8, "application/json")
+            };
+
+            using var checkpointsResponse = await _httpClient.SendAsync(checkpointsRequest).ConfigureAwait(false);
+            if (!checkpointsResponse.IsSuccessStatusCode)
+            {
+                return null;
+            }
+
+            var checkpointsJsonText = await checkpointsResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
+            using var checkpointsDoc = JsonDocument.Parse(checkpointsJsonText);
+            var checkpointsRoot = checkpointsDoc.RootElement;
+
+            if (!checkpointsRoot.TryGetProperty("currently_reached", out var currentlyReachedEl))
+            {
+                return null;
+            }
+
+            var currentlyReached = currentlyReachedEl.GetRawText().Trim('"');
+            if (string.IsNullOrWhiteSpace(currentlyReached))
+            {
+                return null;
+            }
+
+            if (!checkpointsRoot.TryGetProperty("checkpoints", out var checkpointsEl) || checkpointsEl.ValueKind != JsonValueKind.Array)
+            {
+                return null;
+            }
+
+            double? distanceKm = null;
+            foreach (var checkpoint in checkpointsEl.EnumerateArray())
+            {
+                if (!checkpoint.TryGetProperty("id", out var idEl) || !checkpoint.TryGetProperty("dist", out var distEl))
+                {
+                    continue;
+                }
+
+                var id = idEl.GetRawText().Trim('"');
+                if (!string.Equals(id, currentlyReached, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                var distText = distEl.GetString() ?? string.Empty;
+                var parsedDistance = TryExtractDistanceKmFromText(distText)
+                    ?? (double.TryParse(distText.Replace("km", string.Empty, StringComparison.OrdinalIgnoreCase).Trim().Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out var fallbackDistance)
+                        ? fallbackDistance
+                        : null);
+
+                if (parsedDistance.HasValue)
+                {
+                    distanceKm = parsedDistance.Value;
+                }
+
+                break;
+            }
+
+            if (!distanceKm.HasValue)
+            {
+                return null;
+            }
+
+            var resultsPayload = new
+            {
+                postdata = new
+                {
+                    request = new { type = "results", mode = "prod", @base = "https://skiclassics.com" },
+                    race_id = selectedRaceId,
+                    checkpoint = currentlyReached,
+                    start_type = "mass",
+                    event_id = eventId
+                }
+            };
+
+            using var resultsRequest = new HttpRequestMessage(HttpMethod.Post, apiUrl)
+            {
+                Content = new StringContent(JsonSerializer.Serialize(resultsPayload), Encoding.UTF8, "application/json")
+            };
+
+            using var resultsResponse = await _httpClient.SendAsync(resultsRequest).ConfigureAwait(false);
+            if (!resultsResponse.IsSuccessStatusCode)
+            {
+                return null;
+            }
+
+            var resultsJsonText = await resultsResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
+            using var resultsDoc = JsonDocument.Parse(resultsJsonText);
+            var resultsRoot = resultsDoc.RootElement;
+
+            if (!resultsRoot.TryGetProperty("results", out var resultsEl) || resultsEl.ValueKind != JsonValueKind.Array)
+            {
+                return null;
+            }
+
+            foreach (var resultItem in resultsEl.EnumerateArray())
+            {
+                if (!resultItem.TryGetProperty("rank", out var rankEl) || !resultItem.TryGetProperty("time", out var timeEl))
+                {
+                    continue;
+                }
+
+                var rank = rankEl.GetRawText().Trim('"');
+                if (!string.Equals(rank, "1", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                var rawTime = timeEl.GetString();
+                if (!TryParseLeaderElapsedTime(rawTime, out var elapsed))
+                {
+                    return null;
+                }
+
+                return new LeaderData(distanceKm.Value, elapsed);
+            }
+
+            return null;
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(ex, "[SkiClassics API] Fallback failed: {Message}", ex.Message);
+            return null;
+        }
+    }
+
+    private static bool IsSkiClassicsUrl(string url)
+    {
+        return Uri.TryCreate(url, UriKind.Absolute, out var uri)
+            && uri.Host.Contains("skiclassics.com", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string? TryGetJsonPropertyValue(JsonElement element, string propertyName)
+    {
+        if (!element.TryGetProperty(propertyName, out var property))
+        {
+            return null;
+        }
+
+        return property.ValueKind switch
+        {
+            JsonValueKind.String => property.GetString(),
+            JsonValueKind.Number => property.GetRawText(),
+            JsonValueKind.True => bool.TrueString,
+            JsonValueKind.False => bool.FalseString,
+            _ => property.GetRawText().Trim('"')
+        };
+    }
+
+    private static bool GenderMatches(string? actualGender, string expectedGender)
+    {
+        if (string.IsNullOrWhiteSpace(actualGender) || string.IsNullOrWhiteSpace(expectedGender))
+        {
+            return false;
+        }
+
+        var normalizedActual = Regex.Replace(actualGender, @"[^A-Za-z]", string.Empty).ToUpperInvariant();
+        var normalizedExpected = expectedGender.Trim().ToUpperInvariant();
+
+        if (normalizedActual == normalizedExpected)
+        {
+            return true;
+        }
+
+        return normalizedExpected switch
+        {
+            "M" => normalizedActual is "MEN" or "MAN" or "MALE",
+            "W" => normalizedActual is "WOMEN" or "WOMAN" or "FEMALE",
+            _ => false
+        };
+    }
+
+    private static bool TryExtractSkiClassicsParams(string raceUrl, out string eventId, out string season, out string gender)
+    {
+        eventId = string.Empty;
+        season = string.Empty;
+        gender = string.Empty;
+
+        if (string.IsNullOrWhiteSpace(raceUrl))
+        {
+            return false;
+        }
+
+        if (!Uri.TryCreate(raceUrl, UriKind.Absolute, out var uri))
+        {
+            return false;
+        }
+
+        var query = uri.Query;
+        if (string.IsNullOrWhiteSpace(query))
+        {
+            return false;
+        }
+
+        var queryPairs = query.TrimStart('?')
+            .Split('&', StringSplitOptions.RemoveEmptyEntries)
+            .Select(part => part.Split('=', 2))
+            .Where(parts => parts.Length == 2)
+            .ToDictionary(parts => Uri.UnescapeDataString(parts[0]), parts => Uri.UnescapeDataString(parts[1]), StringComparer.OrdinalIgnoreCase);
+
+        if (!queryPairs.TryGetValue("event", out var eventIdValue) ||
+            !queryPairs.TryGetValue("season", out var seasonValue) ||
+            !queryPairs.TryGetValue("gender", out var genderValue))
+        {
+            return false;
+        }
+
+        eventId = eventIdValue;
+        season = seasonValue;
+        gender = genderValue;
+
+        if (gender.Equals("men", StringComparison.OrdinalIgnoreCase))
+        {
+            gender = "M";
+        }
+        else if (gender.Equals("women", StringComparison.OrdinalIgnoreCase))
+        {
+            gender = "W";
+        }
+
+        return !string.IsNullOrWhiteSpace(eventId) && !string.IsNullOrWhiteSpace(season) && !string.IsNullOrWhiteSpace(gender);
+    }
 
         private static string GetCacheKey(string url)
         {
@@ -679,24 +1284,37 @@ public class LiveScraper : ILiveScraper
                 throw new ArgumentNullException(nameof(url), "URL cannot be null or empty when generating cache key");
             }
 
-            // Extract base URL without query parameters
-            // This allows caching by race regardless of elapsed time or other query params
             try
             {
                 var uri = new Uri(url);
-                var baseUrl = $"{uri.Scheme}://{uri.Host}{uri.AbsolutePath}";
+                var cacheKey = $"{uri.Scheme}://{uri.Host}{uri.AbsolutePath}";
 
-                // Also extract race identifier from hash if present (e.g., #result)
-                if (!string.IsNullOrEmpty(uri.Fragment))
+                if (!string.IsNullOrWhiteSpace(uri.Query))
                 {
-                    baseUrl += uri.Fragment;
+                    var normalizedQuery = string.Join("&", uri.Query.TrimStart('?')
+                        .Split('&', StringSplitOptions.RemoveEmptyEntries)
+                        .Select(part => part.Split('=', 2))
+                        .OrderBy(parts => Uri.UnescapeDataString(parts[0]), StringComparer.OrdinalIgnoreCase)
+                        .ThenBy(parts => parts.Length > 1 ? Uri.UnescapeDataString(parts[1]) : string.Empty, StringComparer.OrdinalIgnoreCase)
+                        .Select(parts => parts.Length > 1
+                            ? $"{Uri.UnescapeDataString(parts[0])}={Uri.UnescapeDataString(parts[1])}"
+                            : Uri.UnescapeDataString(parts[0])));
+
+                    if (!string.IsNullOrWhiteSpace(normalizedQuery))
+                    {
+                        cacheKey += $"?{normalizedQuery}";
+                    }
                 }
 
-                return baseUrl;
+                if (!string.IsNullOrEmpty(uri.Fragment))
+                {
+                    cacheKey += uri.Fragment;
+                }
+
+                return cacheKey;
             }
             catch
             {
-                // If URL parsing fails, use the original URL
                 return url;
             }
         }

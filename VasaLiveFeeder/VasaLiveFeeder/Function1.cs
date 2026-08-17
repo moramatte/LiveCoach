@@ -197,13 +197,19 @@ public class Function1
 
         double newSpeed;
         double leaderDistanceKm;
+        string? leaderName;
         bool live;
         try
         {
-            var (pace, leaderDistance, isLive) = await DeriveTempoDelta(raceName, progressStr, elapsedTimeStr, medalTimePct, dryRun);
-            newSpeed = pace; // pace in min/km
+            var (pace, leaderDistance, scrapedLeaderName, isLive) = await DeriveTempoDelta(raceName, progressStr, elapsedTimeStr, medalTimePct, dryRun);
+            newSpeed = pace;
             leaderDistanceKm = leaderDistance;
+            leaderName = scrapedLeaderName;
             live = isLive;
+        }
+        catch (InvalidOperationException e) when (e.Message.StartsWith("No race data available"))
+        {
+            return await CreateJsonResponse(req, new { error = e.Message }, HttpStatusCode.NotFound);
         }
         catch (Exception e)
         {
@@ -220,12 +226,18 @@ public class Function1
 
         // Convert pace from decimal minutes to M:SS format
         var paceFormatted = FormatPaceAsMinutesSeconds(newSpeed);
-        var result = new { newSpeed = paceFormatted, leaderDistanceKm = leaderDistanceKm, live = live };
+        var result = new
+        {
+            newSpeed = paceFormatted,
+            leaderDistanceKm = leaderDistanceKm,
+            leaderName = leaderName,
+            live = live
+        };
 
         return await CreateJsonResponse(req, result, HttpStatusCode.OK);
     }
 
-    public async Task<(double leaderDistanceKm, TimeSpan leaderElapsedTime, bool isLive)> GetLeaderDataAsync(string raceName, bool dryRun = false, double userElapsedTimeMinutes = 0)
+    public async Task<(double leaderDistanceKm, TimeSpan leaderElapsedTime, string? leaderName, bool isLive)> GetLeaderDataAsync(string raceName, bool dryRun = false, double userElapsedTimeMinutes = 0)
     {
         if (string.IsNullOrWhiteSpace(raceName))
         {
@@ -244,7 +256,7 @@ public class Function1
             _logger.LogInformation("DRY RUN: Using user's elapsed time ({Elapsed} min) to simulate leader at {Distance} km (pace: 2:18 min/km)",
                 userElapsedTimeMinutes, leaderDistanceKm);
 
-            return (leaderDistanceKm, leaderElapsedTime, false); // dryRun mode: not live
+            return (leaderDistanceKm, leaderElapsedTime, null, false);
         }
 
         // Create scraper with logger for Application Insights integration
@@ -252,6 +264,12 @@ public class Function1
         var scraperLogger = loggerFactory.CreateLogger<LiveScraper.LiveScraper>();
         var scraper = new LiveScraper.LiveScraper(_httpClient, scraperLogger);
         var url = GetRaceUrl(raceName);
+
+        if (url == null)
+        {
+            _logger.LogInformation("No race data available yet for '{RaceName}'.", raceName);
+            throw new InvalidOperationException($"No race data available yet for '{raceName}'.");
+        }
 
         _logger.LogInformation("Attempting to scrape race URL: {Url}", url);
 
@@ -297,7 +315,7 @@ public class Function1
             _logger.LogInformation("FALLBACK MODE: Using user's elapsed time ({UserElapsed} min) to simulate leader at {Distance} km (pace: 2:18 min/km)",
                 userElapsedTimeMinutes, leaderDistanceKm);
 
-            return (leaderDistanceKm, leaderElapsedTime, false); // fallback mode: not live
+            return (leaderDistanceKm, leaderElapsedTime, null, false);
         }
 
         _logger.LogInformation("Successfully scraped leader data: {Distance} km, Time: {Time}",
@@ -306,10 +324,10 @@ public class Function1
         // Convert nullable TimeSpan to non-nullable (use distance/2.3 pace if time is missing)
         var leaderTime = leaderData.ElapsedTime ?? TimeSpan.FromMinutes(leaderData.DistanceKm * 2.3);
 
-        return (leaderData.DistanceKm, leaderTime, true); // successfully scraped: live data
+        return (leaderData.DistanceKm, leaderTime, leaderData.LeaderName, true);
     }
 
-    public async Task<(double requiredPaceMinPerKm, double leaderDistanceKm, bool isLive)> DeriveTempoDelta(string raceName, string myProgressStr, string elapsedTimeStr, double medalTimePct = 50.0, bool dryRun = false)
+    public async Task<(double requiredPaceMinPerKm, double leaderDistanceKm, string? leaderName, bool isLive)> DeriveTempoDelta(string raceName, string myProgressStr, string elapsedTimeStr, double medalTimePct = 50.0, bool dryRun = false)
     {
         var myProgress = double.Parse(myProgressStr, CultureInfo.InvariantCulture);
         var totalDistance = GetTotalDistance(raceName);
@@ -340,7 +358,7 @@ public class Function1
             raceName, myProgressStr, elapsedTimeStr ?? "(estimated)", medalTimePct, dryRun);
 
 
-        var (leaderDistanceKm, leaderElapsedTime, isLive) = await GetLeaderDataAsync(raceName, dryRun, myElapsedTimeMinutes);
+        var (leaderDistanceKm, leaderElapsedTime, leaderName, isLive) = await GetLeaderDataAsync(raceName, dryRun, myElapsedTimeMinutes);
 
         // Validate elapsed time - must be non-negative and realistic
         if (myElapsedTimeMinutes < 0 || double.IsNaN(myElapsedTimeMinutes) || double.IsInfinity(myElapsedTimeMinutes))
@@ -348,7 +366,7 @@ public class Function1
             _logger.LogWarning("Invalid elapsed time: {ElapsedTime}. Must be >= 0. Returning default pace with live leader data.", 
                 myElapsedTimeMinutes);
             // Return default pace but include actual leader distance and live status
-            return (5.0, leaderDistanceKm, isLive);
+            return (5.0, leaderDistanceKm, leaderName, isLive);
         }
 
         // Validate leader data
@@ -356,7 +374,7 @@ public class Function1
         {
             _logger.LogWarning("Leader has not started yet or invalid leader data. Distance: {Distance} km, Time: {Time}", 
                 leaderDistanceKm, leaderElapsedTime);
-            return (5.0, 0, false); // Return default pace if leader hasn't started
+            return (5.0, 0, leaderName, false);
         }
 
         // Calculate target finishing time based on medalTimePct (e.g., 50% means leader's time + 50%)
@@ -395,7 +413,7 @@ public class Function1
         if (distanceRemaining <= 0)
         {
             _logger.LogWarning("Already at or past finish line");
-            return (0, leaderDistanceKm, isLive);
+            return (0, leaderDistanceKm, leaderName, isLive);
         }
 
         // Calculate time remaining and required pace (works for km=0 and km>0)
@@ -419,59 +437,94 @@ public class Function1
             myProgress, totalDistance, TimeSpan.FromMinutes(myElapsedTimeMinutes).ToString(@"hh\:mm\:ss"),
             requiredPaceMinPerKm, TimeSpan.FromMinutes(actualTimeRemaining).ToString(@"hh\:mm\:ss"));
 
-        return (Math.Round(requiredPaceMinPerKm, 2), Math.Round(leaderDistanceKm, 2), isLive);
+        return (Math.Round(requiredPaceMinPerKm, 2), Math.Round(leaderDistanceKm, 2), leaderName, isLive);
     }
 
     private double GetTotalDistance(string raceName)
     {
         return raceName.ToLower() switch
         {
-            "vasaloppet" => 90.0,
-            "birken" => 53.0,
-            "halvvasan" => 45,
-            "ladiagonela" => 47.0,
-            "craft" => 42.0,
-            "finlandia" => 42.0,
-            "test10k" => 10.0,
-            "test20k" => 20.0,
-            "zelta" => 50.0,
-            "craft ski marathon" => 42.0,
-            "sya" => 40.0,
-            "k-byggslingan" => 40.0,
-            _ => 40.0
+            // Season XVIII full calendar
+            "bad-gastein-prologue"      => 10.0,
+            "sportgastein-criterium"    => 20.0,
+            "bad-gastein-itt-2"         => 10.0,
+            "bad-gastein-criterium"     => 20.0,
+            "engadin-la-diagonela"      => 47.0,
+            "zuoz-st-moritz-sprint"     => 10.0,
+            "marcialonga"               => 70.0,
+            "bedrichov-sprint"          => 10.0,
+            "jizerska-padesatka"        => 50.0,
+            "oxberg-mora-sprint-women"  => 10.0,
+            "oxberg-mora-sprint-men"    => 10.0,
+            "vasaloppet"                => 90.0,
+            "birkebeinerrennet"         => 53.0,
+            "reistadlopet"              => 60.0,
+            "summit-2-senja"            => 40.0,
+            // Legacy/test slugs
+            "birken"                    => 53.0,
+            "halvvasan"                 => 45.0,
+            "ladiagonela"               => 47.0,
+            "craft"                     => 42.0,
+            "craft ski marathon"        => 42.0,
+            "finlandia"                 => 42.0,
+            "moraloppet"                => 90.0,
+            "mora"                      => 90.0,
+            "mora25"                    => 25.0,
+            "zelta"                     => 50.0,
+            "sya"                       => 40.0,
+            "k-byggslingan"             => 40.0,
+            "test10k"                   => 10.0,
+            "test20k"                   => 20.0,
+            _                           => 40.0
         };
     }
 
-    private string GetRaceUrl(string raceName)
+    private string? GetRaceUrl(string raceName)
     {
         if (string.IsNullOrWhiteSpace(raceName))
         {
             throw new ArgumentException("Race name cannot be null or empty", nameof(raceName));
         }
 
-        var raceBaseUrl =  raceName.ToLower() switch
+        var raceBaseUrl = raceName.ToLower() switch
         {
-            "vasaloppet" => "https://skiclassics.com/live-center/?event=1264&season=2026&gender=men",
-            "birken" => "https://skiclassics.com/live-center/?event=1265&season=2026&gender=men",
-            "moraloppet" => "https://live.eqtiming.com/76514",
-            "mora" => "https://live.eqtiming.com/76514",
-            "mora25" => "https://live.eqtiming.com/73153",
-            "craft" => "https://live.eqtiming.com/73152",
-            "finlandia" => "https://skiclassics.com/live-center/?event=12066&season=2026&gender=men",
-            "craft ski marathon" => "https://live.eqtiming.com/73152",
-            "ladiagonela" => "https://skiclassics.com/live-center/?event=9620&season=2026&gender=men",
-            "test10k" => "_",
-            "test20k" => "_",
-            "zelta" => "https://skiclassics.com/live-center/?event=8338&season=2026&gender=men",
-            _ => throw new ArgumentException($"Unknown race name '{raceName}'. Supported races: vasaloppet, birken, moraloppet, mora, mora25, craft, finlandia, ladiagonela, test10k, test20k, zelta", nameof(raceName))
+            // Season XVIII full calendar
+            "bad-gastein-prologue"      => null,
+            "sportgastein-criterium"    => "https://skiclassics.com/results/?race_id=1528",
+            "bad-gastein-itt-2"         => null,
+            "bad-gastein-criterium"     => null,
+            "engadin-la-diagonela"      => "https://skiclassics.com/live-center/?event=9620&season=2026&gender=men",
+            "zuoz-st-moritz-sprint"     => null,
+            "marcialonga"               => "https://skiclassics.com/results/?race_id=1534",
+            "bedrichov-sprint"          => null,
+            "jizerska-padesatka"        => "https://skiclassics.com/results/?race_id=1544",
+            "oxberg-mora-sprint-women"  => null,
+            "oxberg-mora-sprint-men"    => null,
+            "vasaloppet"                => "https://skiclassics.com/live-center/?event=1264&season=2026&gender=men",
+            "birkebeinerrennet"         => "https://skiclassics.com/live-center/?event=1265&season=2026&gender=men",
+            "reistadlopet"              => "https://skiclassics.com/results/?race_id=1576",
+            "summit-2-senja"            => null,
+            // Legacy/test slugs
+            "birken"                    => "https://skiclassics.com/live-center/?event=1265&season=2026&gender=men",
+            "ladiagonela"               => "https://skiclassics.com/live-center/?event=9620&season=2026&gender=men",
+            "moraloppet"                => "https://live.eqtiming.com/76514",
+            "mora"                      => "https://live.eqtiming.com/76514",
+            "mora25"                    => "https://live.eqtiming.com/73153",
+            "craft"                     => "https://live.eqtiming.com/73152",
+            "craft ski marathon"        => "https://live.eqtiming.com/73152",
+            "finlandia"                 => "https://skiclassics.com/live-center/?event=12066&season=2026&gender=men",
+            "zelta"                     => "https://skiclassics.com/live-center/?event=8338&season=2026&gender=men",
+            "test10k"                   => "_",
+            "test20k"                   => "_",
+            _                           => throw new ArgumentException($"Unknown race name '{raceName}'.", nameof(raceName))
         };
 
-        if (raceBaseUrl.Contains("eqtiming"))
+        if (raceBaseUrl != null && raceBaseUrl.Contains("eqtiming"))
         {
             return $"{raceBaseUrl}#result";
         }
 
-        return  raceBaseUrl;
+        return raceBaseUrl;
     }
 
     private static string FormatPaceAsMinutesSeconds(double paceMinPerKm)

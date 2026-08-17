@@ -45,9 +45,11 @@ public class Function1Tests
             // Should return required pace, leader distance, and live status
             Assert.IsTrue(obj.TryGetProperty("newSpeed", out var newSpeed));
             Assert.IsTrue(obj.TryGetProperty("leaderDistanceKm", out var leaderDist));
+            Assert.IsTrue(obj.TryGetProperty("leaderName", out var leaderName));
             Assert.IsTrue(obj.TryGetProperty("live", out var live));
             Assert.AreEqual(60.0, leaderDist.GetDouble());
-            Assert.IsTrue(newSpeed.GetDouble() > 0); // Should be a valid pace
+            Assert.IsTrue(newSpeed.GetString()?.Length > 0); // Should be a valid formatted pace
+            Assert.AreEqual(JsonValueKind.Null, leaderName.ValueKind);
             Assert.IsFalse(live.GetBoolean()); // Using TestableLiveScraper should return live data, but in test it's mocked so false
         }
 
@@ -57,10 +59,11 @@ public class Function1Tests
         await EnsureScraperSecretsConfiguredAsync();
 
         var func = new Function1(NullLogger<Function1>.Instance);
-        var (distance, time, isLive) = await func.GetLeaderDataAsync("vasaloppet", dryRun: false, userElapsedTimeMinutes: 180);
+        var (distance, time, leaderName, isLive) = await func.GetLeaderDataAsync("vasaloppet", dryRun: false, userElapsedTimeMinutes: 180);
 
         Assert.IsTrue(distance > 0, "Expected a positive leader distance from live scraping.");
         Assert.IsTrue(time.TotalMinutes > 0, "Expected a positive leader elapsed time from live scraping.");
+        Assert.IsTrue(leaderName == null || leaderName.Length > 0);
         Assert.IsTrue(isLive, "Expected live scraper data, not fallback simulation.");
     }
 
@@ -107,11 +110,12 @@ public class Function1Tests
             // Target: Leader's time * 1.5 = finish at 90km in ~270 min * 1.5 = 405 min
             // I have 255 minutes left for 60km remaining
 
-            var (requiredPace, leaderDistance, isLive) = await func.DeriveTempoDelta("Vasaloppet", "30.00", "150", dryRun: false);
+            var (requiredPace, leaderDistance, leaderName, isLive) = await func.DeriveTempoDelta("Vasaloppet", "30.00", "150", dryRun: false);
 
             Assert.AreEqual(60.0, leaderDistance);
             Assert.IsTrue(requiredPace > 0, "Required pace should be positive");
             Assert.IsTrue(requiredPace < 10, "Required pace should be reasonable (< 10 min/km)");
+            Assert.IsNull(leaderName);
             Assert.IsTrue(isLive); // Using real scraper (TestableLiveScraper returns data), should be true
         }
 
@@ -121,10 +125,11 @@ public class Function1Tests
             var func = new Function1(NullLogger<Function1>.Instance);
 
             // Use elapsed time directly (now required parameter)
-            var (pace1, _, isLive) = await func.DeriveTempoDelta("test10k", "5.0", "25", dryRun: true);
+            var (pace1, _, leaderName, isLive) = await func.DeriveTempoDelta("test10k", "5.0", "25", dryRun: true);
 
             // Should calculate based on 25 minutes elapsed
             Assert.IsTrue(pace1 > 0);
+            Assert.IsNull(leaderName);
             Assert.IsFalse(isLive); // Dry run mode should return false
         }
 
@@ -170,10 +175,11 @@ public class Function1Tests
             var func = new Function1(NullLogger<Function1>.Instance);
 
             // Dry run should work without real scraper data
-            var (pace, leaderDist, isLive) = await func.DeriveTempoDelta("test10k", "3.0", "15", dryRun: true);
+            var (pace, leaderDist, leaderName, isLive) = await func.DeriveTempoDelta("test10k", "3.0", "15", dryRun: true);
 
             Assert.IsTrue(pace > 0, "Dry run should return valid pace");
             Assert.IsTrue(leaderDist >= 0, "Dry run should return valid leader distance");
+            Assert.IsNull(leaderName);
             Assert.IsFalse(isLive, "Dry run should return isLive=false");
         }
 }

@@ -297,16 +297,17 @@ public class LiveScraper : ILiveScraper
                     new
                     {
                         role = "system",
-                        content = "Extract distance (km) and leader's time from race timing data.\n\n" +
+                        content =                         "Extract distance (km), leader's time, and leader name from race timing data.\n\n" +
                                    "PROVIDERS:\n" +
                                    "- SkiClassics: Distance in h3/h4 headings or 'Active Checkpoint'\n" +
-                                   "- EQTiming: Distance in 'Point' column or race title. 'Mål' = Finish\n\n" +
+                                   "- EQTiming: Distance in 'Point' column or race title. 'Mï¿½l' = Finish\n\n" +
                                    "RULES:\n" +
                                    "- Distance: Current checkpoint where leader is tracked\n" +
-                                   "- Time: From first data row (leader), format H:MM:SS or HH:MM:SS\n\n" +
+                                   "- Time: From first data row (leader), format H:MM:SS or HH:MM:SS\n" +
+                                   "- Name: Leader surname if available, otherwise full displayed leader name\n\n" +
                                    "OUTPUT FORMAT (no explanation):\n" +
-                                   "distance: [number], time: [H:MM:SS]\n" +
-                                   "If data unclear: distance: null, time: null"
+                                   "distance: [number], time: [H:MM:SS], name: [text]\n" +
+                                   "If data unclear: distance: null, time: null, name: null"
                     },
                     new
                     {
@@ -315,7 +316,7 @@ public class LiveScraper : ILiveScraper
                     }
                 },
                 temperature = 0.0, // Use 0 for deterministic output
-                max_tokens = 50 // Concise output only
+                max_tokens = 80 // Concise output only
             };
 
             var json = JsonSerializer.Serialize(requestBody);
@@ -424,8 +425,8 @@ public class LiveScraper : ILiveScraper
         }
         else if (provider == "EQTiming")
         {
-            // Extract race distance from table content (e.g., "45 km Motion", "45 km Tävling")
-            var raceDistanceMatches = Regex.Matches(html, @">([\d.,]+)\s*km\s+(?:Motion|Tävling|Elite|Race)<", RegexOptions.IgnoreCase);
+            // Extract race distance from table content (e.g., "45 km Motion", "45 km Tï¿½vling")
+            var raceDistanceMatches = Regex.Matches(html, @">([\d.,]+)\s*km\s+(?:Motion|Tï¿½vling|Elite|Race)<", RegexOptions.IgnoreCase);
             if (raceDistanceMatches.Count > 0)
             {
                 sections.Add($"\nRace distances found:");
@@ -441,7 +442,7 @@ public class LiveScraper : ILiveScraper
                 _logger?.LogInformation("[EQTiming] Found {Count} unique race distances", distances.Count);
             }
             
-            // Extract Point column values (current checkpoint positions, including "Mål")
+            // Extract Point column values (current checkpoint positions, including "Mï¿½l")
             var pointMatches = Regex.Matches(html, @"<td[^>]*class=""[^""]*col-point-scroll[^""]*""[^>]*>([^<]+)</td>", RegexOptions.IgnoreCase);
             if (pointMatches.Count > 0)
             {
@@ -455,11 +456,11 @@ public class LiveScraper : ILiveScraper
                         }
                         _logger?.LogInformation("[EQTiming] Found {Count} Point column values, showing first 10", pointMatches.Count);
 
-                        // If we see "Mål" (Finish), note it
-                        if (pointValues.Any(v => v.Contains("Mål") || v.Contains("mal")))
+                        // If we see "Mï¿½l" (Finish), note it
+                        if (pointValues.Any(v => v.Contains("Mï¿½l") || v.Contains("mal")))
                         {
-                            sections.Add($"\n[Note: 'Mål' (Finish) detected - leader has finished race]");
-                            _logger?.LogInformation("[EQTiming] Detected 'Mål' (Finish) in Point column");
+                            sections.Add($"\n[Note: 'Mï¿½l' (Finish) detected - leader has finished race]");
+                            _logger?.LogInformation("[EQTiming] Detected 'Mï¿½l' (Finish) in Point column");
                         }
                     }
                     else
@@ -552,6 +553,7 @@ public class LiveScraper : ILiveScraper
 
         var distanceMatch = Regex.Match(aiResult, @"distance:\s*([\d.]+)", RegexOptions.IgnoreCase);
         var timeMatch = Regex.Match(aiResult, @"time:\s*(\d+:\d+:\d+)", RegexOptions.IgnoreCase);
+        var nameMatch = Regex.Match(aiResult, @"name:\s*(.+?)(?:,|$)", RegexOptions.IgnoreCase);
 
         if (!distanceMatch.Success)
             return null;
@@ -562,7 +564,13 @@ public class LiveScraper : ILiveScraper
         if (timeMatch.Success && TimeSpan.TryParse(timeMatch.Groups[1].Value, out var parsedTime))
             time = parsedTime;
 
-        return new LeaderData(distance, time);
+        var leaderName = nameMatch.Success ? nameMatch.Groups[1].Value.Trim() : null;
+        if (string.Equals(leaderName, "null", StringComparison.OrdinalIgnoreCase))
+        {
+            leaderName = null;
+        }
+
+        return new LeaderData(distance, time, leaderName);
     }
 
     private async Task<string> GetRenderedHtmlViaBrowserlessAsync(string url, string apiToken, int timeoutMs)
@@ -1277,24 +1285,58 @@ public class LiveScraper : ILiveScraper
         return !string.IsNullOrWhiteSpace(eventId) && !string.IsNullOrWhiteSpace(season) && !string.IsNullOrWhiteSpace(gender);
     }
 
-        private static string GetCacheKey(string url)
+    private static string? TryExtractLeaderNameFromResultItem(JsonElement resultItem)
+    {
+        foreach (var propertyName in new[] { "lastname", "last_name" })
         {
-            if (string.IsNullOrWhiteSpace(url))
+            if (resultItem.TryGetProperty(propertyName, out var lastNameEl))
             {
-                throw new ArgumentNullException(nameof(url), "URL cannot be null or empty when generating cache key");
+                var lastName = lastNameEl.GetString();
+                if (!string.IsNullOrWhiteSpace(lastName))
+                {
+                    return lastName.Trim();
+                }
+            }
+        }
+
+        foreach (var propertyName in new[] { "name", "athlete", "fullname", "full_name", "display_name" })
+        {
+            if (!resultItem.TryGetProperty(propertyName, out var nameEl))
+            {
+                continue;
             }
 
-            try
+            var fullName = nameEl.GetString();
+            if (string.IsNullOrWhiteSpace(fullName))
             {
-                var uri = new Uri(url);
-                var cacheKey = $"{uri.Scheme}://{uri.Host}{uri.AbsolutePath}";
+                continue;
+            }
 
-                if (!string.IsNullOrWhiteSpace(uri.Query))
-                {
-                    var normalizedQuery = string.Join("&", uri.Query.TrimStart('?')
-                        .Split('&', StringSplitOptions.RemoveEmptyEntries)
-                        .Select(part => part.Split('=', 2))
-                        .OrderBy(parts => Uri.UnescapeDataString(parts[0]), StringComparer.OrdinalIgnoreCase)
+            var parts = fullName.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            return parts.Length > 1 ? parts[^1] : fullName.Trim();
+        }
+
+        return null;
+    }
+
+    private static string GetCacheKey(string url)
+    {
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            throw new ArgumentNullException(nameof(url), "URL cannot be null or empty when generating cache key");
+        }
+
+        try
+        {
+            var uri = new Uri(url);
+            var cacheKey = $"{uri.Scheme}://{uri.Host}{uri.AbsolutePath}";
+
+            if (!string.IsNullOrWhiteSpace(uri.Query))
+            {
+                var normalizedQuery = string.Join("&", uri.Query.TrimStart('?')
+                    .Split('&', StringSplitOptions.RemoveEmptyEntries)
+                    .Select(part => part.Split('=', 2))
+                    .OrderBy(parts => Uri.UnescapeDataString(parts[0]), StringComparer.OrdinalIgnoreCase)
                         .ThenBy(parts => parts.Length > 1 ? Uri.UnescapeDataString(parts[1]) : string.Empty, StringComparer.OrdinalIgnoreCase)
                         .Select(parts => parts.Length > 1
                             ? $"{Uri.UnescapeDataString(parts[0])}={Uri.UnescapeDataString(parts[1])}"

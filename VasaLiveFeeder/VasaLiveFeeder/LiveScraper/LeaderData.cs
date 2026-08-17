@@ -15,10 +15,13 @@ public class LeaderData
     /// Null if time information is not available.
     /// </summary>
     public TimeSpan? ElapsedTime { get; set; }
-    
-    public LeaderData(double distanceKm, TimeSpan? elapsedTime = null)
+
+    public string? LeaderName { get; set; }
+
+    public LeaderData(double distanceKm, TimeSpan? elapsedTime = null, string? leaderName = null)
     {
         DistanceKm = distanceKm;
         ElapsedTime = elapsedTime;
+        LeaderName = leaderName;
     }
 }

@@ -198,13 +198,15 @@ public class Function1
         double newSpeed;
         double leaderDistanceKm;
         string? leaderName;
+        string? projectedDiff;
         bool live;
         try
         {
-            var (pace, leaderDistance, scrapedLeaderName, isLive) = await DeriveTempoDelta(raceName, progressStr, elapsedTimeStr, medalTimePct, dryRun);
+            var (pace, leaderDistance, scrapedLeaderName, projectedFinishDiff, isLive) = await DeriveTempoDelta(raceName, progressStr, elapsedTimeStr, medalTimePct, dryRun);
             newSpeed = pace;
             leaderDistanceKm = leaderDistance;
             leaderName = scrapedLeaderName;
+            projectedDiff = projectedFinishDiff;
             live = isLive;
         }
         catch (InvalidOperationException e) when (e.Message.StartsWith("No race data available"))
@@ -231,6 +233,7 @@ public class Function1
             newSpeed = paceFormatted,
             leaderDistanceKm = leaderDistanceKm,
             leaderName = leaderName,
+            projectedDiff = projectedDiff,
             live = live
         };
 
@@ -327,7 +330,7 @@ public class Function1
         return (leaderData.DistanceKm, leaderTime, leaderData.LeaderName, true);
     }
 
-    public async Task<(double requiredPaceMinPerKm, double leaderDistanceKm, string? leaderName, bool isLive)> DeriveTempoDelta(string raceName, string myProgressStr, string elapsedTimeStr, double medalTimePct = 50.0, bool dryRun = false)
+    public async Task<(double requiredPaceMinPerKm, double leaderDistanceKm, string? leaderName, string? projectedDiff, bool isLive)> DeriveTempoDelta(string raceName, string myProgressStr, string elapsedTimeStr, double medalTimePct = 50.0, bool dryRun = false)
     {
         var myProgress = double.Parse(myProgressStr, CultureInfo.InvariantCulture);
         var totalDistance = GetTotalDistance(raceName);
@@ -366,7 +369,7 @@ public class Function1
             _logger.LogWarning("Invalid elapsed time: {ElapsedTime}. Must be >= 0. Returning default pace with live leader data.", 
                 myElapsedTimeMinutes);
             // Return default pace but include actual leader distance and live status
-            return (5.0, leaderDistanceKm, leaderName, isLive);
+            return (5.0, leaderDistanceKm, leaderName, null, isLive);
         }
 
         // Validate leader data
@@ -374,7 +377,7 @@ public class Function1
         {
             _logger.LogWarning("Leader has not started yet or invalid leader data. Distance: {Distance} km, Time: {Time}", 
                 leaderDistanceKm, leaderElapsedTime);
-            return (5.0, 0, leaderName, false);
+            return (5.0, 0, leaderName, null, false);
         }
 
         // Calculate target finishing time based on medalTimePct (e.g., 50% means leader's time + 50%)
@@ -413,7 +416,7 @@ public class Function1
         if (distanceRemaining <= 0)
         {
             _logger.LogWarning("Already at or past finish line");
-            return (0, leaderDistanceKm, leaderName, isLive);
+            return (0, leaderDistanceKm, leaderName, FormatSignedDuration(TimeSpan.Zero), isLive);
         }
 
         // Calculate time remaining and required pace (works for km=0 and km>0)
@@ -437,7 +440,14 @@ public class Function1
             myProgress, totalDistance, TimeSpan.FromMinutes(myElapsedTimeMinutes).ToString(@"hh\:mm\:ss"),
             requiredPaceMinPerKm, TimeSpan.FromMinutes(actualTimeRemaining).ToString(@"hh\:mm\:ss"));
 
-        return (Math.Round(requiredPaceMinPerKm, 2), Math.Round(leaderDistanceKm, 2), leaderName, isLive);
+        string? projectedDiff = null;
+        if (myProgress > 0 && currentPace > 0)
+        {
+            var projectedFinishTime = TimeSpan.FromMinutes(myElapsedTimeMinutes + (currentPace * distanceRemaining));
+            projectedDiff = FormatSignedDuration(targetFinishTime - projectedFinishTime);
+        }
+
+        return (Math.Round(requiredPaceMinPerKm, 2), Math.Round(leaderDistanceKm, 2), leaderName, projectedDiff, isLive);
     }
 
     private double GetTotalDistance(string raceName)
@@ -540,6 +550,20 @@ public class Function1
         }
 
         return $"{minutes}:{seconds:D2}";
+    }
+
+    private static string FormatSignedDuration(TimeSpan duration)
+    {
+        var sign = duration.TotalSeconds < 0 ? "-" : "+";
+        var absolute = duration.Duration();
+        var hours = (int)absolute.TotalHours;
+
+        if (hours > 0)
+        {
+            return $"{sign}{hours}:{absolute.Minutes:D2}";
+        }
+
+        return $"{sign}{absolute.Minutes}:{absolute.Seconds:D2}";
     }
 
     private static async Task<HttpResponseData> CreateJsonResponse(HttpRequestData req, object value, HttpStatusCode status)

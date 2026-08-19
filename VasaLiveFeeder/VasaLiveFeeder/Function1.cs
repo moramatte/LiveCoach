@@ -49,6 +49,7 @@ public class Function1
         string elapsedTimeStr = null;
         string currentSpeedStr = null;
         string medalTimePctStr = null;
+        string genderStr = null;
         bool dryRun = false;
         var rawQuery = req.Url.Query; // starts with '?' when present
         try
@@ -68,6 +69,7 @@ public class Function1
                     if (key == "currentspeed" || key == "speed") currentSpeedStr = val;
                     if (key == "medaltimepct" || key == "medalpct" || key == "medal") medalTimePctStr = val;
                     if (key == "dryrun") dryRun = val.Equals("true", StringComparison.OrdinalIgnoreCase) || val == "1";
+                    if (key == "gender") genderStr = val;
                 }
             }
         }
@@ -105,7 +107,8 @@ public class Function1
                             if (root.TryGetProperty("medalTimePct", out var jMedal)) medalTimePctStr ??= jMedal.GetRawText().Trim('"');
                             if (root.TryGetProperty("medalPct", out var jMedal2)) medalTimePctStr ??= jMedal2.GetRawText().Trim('"');
                             if (root.TryGetProperty("medal", out var jMedal3)) medalTimePctStr ??= jMedal3.GetRawText().Trim('"');
-                            if (root.TryGetProperty("dryRun", out var jDry)) dryRun = jDry.GetBoolean();
+                    if (root.TryGetProperty("dryRun", out var jDry)) dryRun = jDry.GetBoolean();
+                        if (root.TryGetProperty("gender", out var jGender)) genderStr ??= jGender.GetString();
                         }
                         catch (JsonException) { /* ignore parse errors below */ }
                     }
@@ -202,7 +205,7 @@ public class Function1
         bool live;
         try
         {
-            var (pace, leaderDistance, scrapedLeaderName, projectedFinishDiff, isLive) = await DeriveTempoDelta(raceName, progressStr, elapsedTimeStr, medalTimePct, dryRun);
+            var (pace, leaderDistance, scrapedLeaderName, projectedFinishDiff, isLive) = await DeriveTempoDelta(raceName, progressStr, elapsedTimeStr, medalTimePct, dryRun, genderStr);
             newSpeed = pace;
             leaderDistanceKm = leaderDistance;
             leaderName = scrapedLeaderName;
@@ -243,7 +246,7 @@ public class Function1
         return await CreateJsonResponse(req, result, HttpStatusCode.OK);
     }
 
-    public async Task<(double leaderDistanceKm, TimeSpan leaderElapsedTime, string? leaderName, bool isLive)> GetLeaderDataAsync(string raceName, bool dryRun = false, double userElapsedTimeMinutes = 0)
+    public async Task<(double leaderDistanceKm, TimeSpan leaderElapsedTime, string? leaderName, bool isLive)> GetLeaderDataAsync(string raceName, bool dryRun = false, double userElapsedTimeMinutes = 0, string? gender = null)
     {
         if (string.IsNullOrWhiteSpace(raceName))
         {
@@ -280,7 +283,7 @@ public class Function1
         });
         var scraperLogger = loggerFactory.CreateLogger<LiveScraper.LiveScraper>();
         var scraper = new LiveScraper.LiveScraper(_httpClient, scraperLogger);
-        var url = GetRaceUrl(raceName);
+        var url = GetRaceUrl(raceName, gender);
 
         if (url == null)
         {
@@ -344,7 +347,7 @@ public class Function1
         return (leaderData.DistanceKm, leaderTime, leaderData.LeaderName, true);
     }
 
-    public async Task<(double requiredPaceMinPerKm, double leaderDistanceKm, string? leaderName, string? projectedDiff, bool isLive)> DeriveTempoDelta(string raceName, string myProgressStr, string elapsedTimeStr, double medalTimePct = 50.0, bool dryRun = false)
+    public async Task<(double requiredPaceMinPerKm, double leaderDistanceKm, string? leaderName, string? projectedDiff, bool isLive)> DeriveTempoDelta(string raceName, string myProgressStr, string elapsedTimeStr, double medalTimePct = 50.0, bool dryRun = false, string? gender = null)
     {
         var myProgress = double.Parse(myProgressStr, CultureInfo.InvariantCulture);
         var totalDistance = GetTotalDistance(raceName);
@@ -375,7 +378,7 @@ public class Function1
             raceName, myProgressStr, elapsedTimeStr ?? "(estimated)", medalTimePct, dryRun);
 
 
-        var (leaderDistanceKm, leaderElapsedTime, leaderName, isLive) = await GetLeaderDataAsync(raceName, dryRun, myElapsedTimeMinutes);
+        var (leaderDistanceKm, leaderElapsedTime, leaderName, isLive) = await GetLeaderDataAsync(raceName, dryRun, myElapsedTimeMinutes, gender);
 
         // Validate elapsed time - must be non-negative and realistic
         if (myElapsedTimeMinutes < 0 || double.IsNaN(myElapsedTimeMinutes) || double.IsInfinity(myElapsedTimeMinutes))
@@ -503,12 +506,19 @@ public class Function1
         };
     }
 
-    private string? GetRaceUrl(string raceName)
+    private string? GetRaceUrl(string raceName, string? gender = null)
     {
         if (string.IsNullOrWhiteSpace(raceName))
         {
             throw new ArgumentException("Race name cannot be null or empty", nameof(raceName));
         }
+
+        var resolvedGender = (gender?.ToLowerInvariant()) switch
+        {
+            "women" => "women",
+            "w"     => "women",
+            _       => "men"
+        };
 
         var raceBaseUrl = raceName.ToLower() switch
         {
@@ -546,6 +556,13 @@ public class Function1
         if (raceBaseUrl != null && raceBaseUrl.Contains("eqtiming"))
         {
             return $"{raceBaseUrl}#result";
+        }
+
+        // Substitute gender in SkiClassics URLs
+        if (raceBaseUrl != null && raceBaseUrl.Contains("skiclassics.com") && raceBaseUrl.Contains("gender="))
+        {
+            raceBaseUrl = System.Text.RegularExpressions.Regex.Replace(
+                raceBaseUrl, @"gender=\w+", $"gender={resolvedGender}");
         }
 
         return raceBaseUrl;

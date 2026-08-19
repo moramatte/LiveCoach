@@ -48,30 +48,41 @@ public class LiveScraper : ILiveScraper
             // For SkiClassics and EQTiming, we need JavaScript rendering
             // Try Browserless first (if available), then fall back to Playwright
             var browserlessToken = Environment.GetEnvironmentVariable("BROWSERLESS_TOKEN");
+            _logger?.LogInformation("PATH=GetLeaderDataAsync start url={Url} browserlessTokenPresent={HasBrowserless}", url, !string.IsNullOrWhiteSpace(browserlessToken));
             if (!string.IsNullOrWhiteSpace(browserlessToken))
             {
                 try
                 {
+                    _logger?.LogInformation("PATH=Browserless candidate url={Url}", url);
                     _logger?.LogInformation("[GetLeaderDataAsync] Trying Browserless for {Url}", url);
                     var result = await GetLeaderDataWithBrowserlessOrPlaywrightAsync(url, browserlessToken, 60000).ConfigureAwait(false);
                     if (result != null)
                     {
+                        _logger?.LogInformation("PATH=Browserless success url={Url}", url);
                         AddToCache(cacheKey, result);
                         return result;
                     }
+                    _logger?.LogInformation("PATH=Browserless returned null url={Url}", url);
                 }
                 catch (Exception ex)
                 {
+                    _logger?.LogWarning(ex, "PATH=Browserless failure url={Url} message={Message}", url, ex.Message);
                     _logger?.LogWarning(ex, "[Browserless error]: {Message}. Falling back to Playwright...", ex.Message);
                 }
             }
 
             // Fall back to Playwright for JavaScript rendering
+            _logger?.LogInformation("PATH=Playwright fallback url={Url}", url);
             _logger?.LogInformation("[GetLeaderDataAsync] Using Playwright for {Url}", url);
             var playwrightResult = await GetLeaderDataWithScraperAsync(url, 60000).ConfigureAwait(false);
             if (playwrightResult != null)
             {
+                _logger?.LogInformation("PATH=Playwright success url={Url}", url);
                 AddToCache(cacheKey, playwrightResult);
+            }
+            else
+            {
+                _logger?.LogInformation("PATH=Playwright returned null url={Url}", url);
             }
             return playwrightResult;
         }
@@ -119,6 +130,7 @@ public class LiveScraper : ILiveScraper
 
         try
         {
+            _logger?.LogInformation("PATH=Scraper start url={Url} timeoutMs={TimeoutMs}", url, timeoutMs);
             var browserlessToken = Environment.GetEnvironmentVariable("BROWSERLESS_TOKEN");
             var groqApiKey = Environment.GetEnvironmentVariable("GROQ_API_KEY");
 
@@ -130,15 +142,18 @@ public class LiveScraper : ILiveScraper
 
             if (IsSkiClassicsUrl(url))
             {
+                _logger?.LogInformation("PATH=SkiClassicsApi candidate url={Url}", url);
                 _logger?.LogInformation("[SkiClassics API] Attempting deterministic extraction for {Url}", url);
                 var apiResult = await TryGetLeaderDataFromSkiClassicsApiAsync(url).ConfigureAwait(false);
                 if (apiResult != null)
                 {
+                    _logger?.LogInformation("PATH=SkiClassicsApi success url={Url}", url);
                     _logger?.LogInformation("[SkiClassics API] Deterministic extraction succeeded: {Distance} km, Time: {Time}", apiResult.DistanceKm, apiResult.ElapsedTime);
                     AddToCache(cacheKey, apiResult);
                     return apiResult;
                 }
 
+                _logger?.LogInformation("PATH=SkiClassicsApi fallback url={Url}", url);
                 _logger?.LogWarning("[SkiClassics API] Deterministic extraction failed for {Url}. Falling back to rendered HTML parsing.", url);
             }
 
@@ -160,6 +175,7 @@ public class LiveScraper : ILiveScraper
                     else
                     {
                         renderMethod = "ScraperService";
+                        _logger?.LogInformation("PATH=ScraperService success url={Url}", url);
                         _logger?.LogInformation("[ScraperService] Successfully rendered HTML ({Length} chars)", htmlContent?.Length ?? 0);
                     }
                 }
@@ -175,13 +191,16 @@ public class LiveScraper : ILiveScraper
             {
                 try
                 {
+                    _logger?.LogInformation("PATH=Browserless render fallback url={Url}", url);
                     _logger?.LogInformation("[Browserless] Attempting to fetch {Url}", url);
                     htmlContent = await GetRenderedHtmlViaBrowserlessAsync(url, browserlessToken, timeoutMs).ConfigureAwait(false);
                     renderMethod = "Browserless";
+                    _logger?.LogInformation("PATH=Browserless render success url={Url}", url);
                     _logger?.LogInformation("[Browserless] Successfully rendered HTML ({Length} chars)", htmlContent?.Length ?? 0);
                 }
                 catch (Exception ex)
                 {
+                    _logger?.LogWarning(ex, "PATH=Browserless render failure url={Url} message={Message}", url, ex.Message);
                     _logger?.LogWarning(ex, "[Browserless] Failed: {Message}. Will try Playwright...", ex.Message);
                     htmlContent = null;
                 }
@@ -190,6 +209,7 @@ public class LiveScraper : ILiveScraper
             // Try Playwright as last resort
             if (htmlContent == null)
             {
+                _logger?.LogInformation("PATH=Playwright render fallback url={Url}", url);
                 _logger?.LogInformation("[Playwright] Attempting fallback for {Url}", url);
                 await EnsurePlaywrightBrowsersInstalledAsync().ConfigureAwait(false);
                 using var playwright = await Playwright.CreateAsync().ConfigureAwait(false);
@@ -224,6 +244,7 @@ public class LiveScraper : ILiveScraper
                     _logger?.LogWarning("[Playwright] Privacy prompt still present after dismissal attempt for {Url}. HTML preview: {HtmlPreview}", url, htmlPreview);
                 }
                 renderMethod = "Playwright";
+                _logger?.LogInformation("PATH=Playwright render success url={Url}", url);
                 _logger?.LogInformation("[Playwright] Successfully fetched HTML ({Length} chars)", htmlContent.Length);
             }
 
@@ -257,11 +278,13 @@ public class LiveScraper : ILiveScraper
             var apiFallbackResult = await TryGetLeaderDataFromSkiClassicsApiAsync(url).ConfigureAwait(false);
             if (apiFallbackResult != null)
             {
+                _logger?.LogInformation("PATH=SkiClassicsApi fallback success url={Url}", url);
                 _logger?.LogInformation("[SkiClassics API] Fallback succeeded: {Distance} km, Time: {Time}", apiFallbackResult.DistanceKm, apiFallbackResult.ElapsedTime);
                 AddToCache(cacheKey, apiFallbackResult);
                 return apiFallbackResult;
             }
 
+            _logger?.LogWarning("PATH=All extraction failed url={Url} renderMethod={RenderMethod}", url, renderMethod);
             _logger?.LogWarning("[{RenderMethod}] All extraction strategies failed", renderMethod);
             return null;
             }
@@ -1176,7 +1199,11 @@ public class LiveScraper : ILiveScraper
                     return null;
                 }
 
-                return new LeaderData(distanceKm.Value, elapsed);
+                var leaderName = TryExtractLeaderNameFromResultItem(resultItem);
+                _logger?.LogInformation("[SkiClassics API] Leader extracted: distance={Distance} km, name={LeaderName}, time={Time}",
+                    distanceKm.Value, leaderName ?? "(null)", elapsed);
+
+                return new LeaderData(distanceKm.Value, elapsed, leaderName);
             }
 
             return null;
@@ -1287,7 +1314,7 @@ public class LiveScraper : ILiveScraper
 
     private static string? TryExtractLeaderNameFromResultItem(JsonElement resultItem)
     {
-        foreach (var propertyName in new[] { "lastname", "last_name" })
+        foreach (var propertyName in new[] { "surname", "lastname", "last_name" })
         {
             if (resultItem.TryGetProperty(propertyName, out var lastNameEl))
             {
@@ -1299,7 +1326,7 @@ public class LiveScraper : ILiveScraper
             }
         }
 
-        foreach (var propertyName in new[] { "name", "athlete", "fullname", "full_name", "display_name" })
+        foreach (var propertyName in new[] { "fullname", "full_name", "display_name", "athlete", "name" })
         {
             if (!resultItem.TryGetProperty(propertyName, out var nameEl))
             {
@@ -1313,7 +1340,10 @@ public class LiveScraper : ILiveScraper
             }
 
             var parts = fullName.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
-            return parts.Length > 1 ? parts[^1] : fullName.Trim();
+            if (parts.Length > 1)
+            {
+                return parts[^1];
+            }
         }
 
         return null;

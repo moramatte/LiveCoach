@@ -228,6 +228,9 @@ public class Function1
 
         // Convert pace from decimal minutes to M:SS format
         var paceFormatted = FormatPaceAsMinutesSeconds(newSpeed);
+        _logger.LogInformation("[RESPONSE] race={Race}, newSpeed={NewSpeed}, leaderDistanceKm={LeaderDistanceKm}, leaderName={LeaderName}, projectedDiff={ProjectedDiff}, live={Live}",
+            raceName, paceFormatted, leaderDistanceKm, leaderName ?? "(null)", projectedDiff ?? "(null)", live);
+
         var result = new
         {
             newSpeed = paceFormatted,
@@ -263,7 +266,18 @@ public class Function1
         }
 
         // Create scraper with logger for Application Insights integration
-        var loggerFactory = LoggerFactory.Create(builder => builder.AddApplicationInsights());
+        var aiConnectionString = Environment.GetEnvironmentVariable("APPLICATIONINSIGHTS_CONNECTION_STRING");
+        var loggerFactory = LoggerFactory.Create(builder =>
+        {
+            builder.SetMinimumLevel(Microsoft.Extensions.Logging.LogLevel.Information);
+            if (!string.IsNullOrWhiteSpace(aiConnectionString))
+            {
+                builder.AddApplicationInsights(telemetry =>
+                {
+                    telemetry.ConnectionString = aiConnectionString;
+                }, _ => { });
+            }
+        });
         var scraperLogger = loggerFactory.CreateLogger<LiveScraper.LiveScraper>();
         var scraper = new LiveScraper.LiveScraper(_httpClient, scraperLogger);
         var url = GetRaceUrl(raceName);

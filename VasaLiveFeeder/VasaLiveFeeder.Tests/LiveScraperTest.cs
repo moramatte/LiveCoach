@@ -68,6 +68,7 @@ namespace VasaLiveFeeder.Tests
             Assert.IsNotNull(data);
             Assert.AreEqual(30, data.DistanceKm);
             Assert.AreEqual(new TimeSpan(1, 28, 48), data.ElapsedTime);
+            Assert.IsFalse(string.IsNullOrWhiteSpace(data.LeaderName));
         }
 
         [TestMethod]
@@ -79,6 +80,7 @@ namespace VasaLiveFeeder.Tests
             Assert.IsNotNull(data);
             Assert.AreEqual(30, data.DistanceKm);
             Assert.AreEqual(new TimeSpan(1, 28, 48), data.ElapsedTime);
+            Assert.IsFalse(string.IsNullOrWhiteSpace(data.LeaderName));
         }
 
         [TestMethod]
@@ -90,6 +92,7 @@ namespace VasaLiveFeeder.Tests
             Assert.IsNotNull(data);
             Assert.AreEqual(38, data.DistanceKm);
             Assert.AreEqual(new TimeSpan(1, 26, 13), data.ElapsedTime);
+            Assert.IsFalse(string.IsNullOrWhiteSpace(data.LeaderName));
         }
 
         [TestMethod]
@@ -101,6 +104,7 @@ namespace VasaLiveFeeder.Tests
             Assert.IsNotNull(data);
             Assert.AreEqual(30, data.DistanceKm);
             Assert.AreEqual(new TimeSpan(1, 28, 48), data.ElapsedTime);
+            Assert.IsFalse(string.IsNullOrWhiteSpace(data.LeaderName));
         }
 
         [TestMethod]

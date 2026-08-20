@@ -38,3 +38,6 @@ bld/
 
 # Azure Functions
 *.azurewebsites.net.publishsettings
+
+publish_out/
+deploy.zip
